@@ -1,164 +1,169 @@
 ********************************************************************************
 * merge_carteras.do
-* Consolidación de bases PEIP, ANIN, UGRD, UGEO contra CUI_cartera_GN en Stata.
+* Consolidación de bases PEIP, ANIN, UGRD, UGEO contra CUI_cartera_GN.
 *
-* Lógica:
-*   1) Lee los CUIs de cada hoja fuente (los encabezados están en la fila 3,
-*      por eso usamos cellrange con "A3").
-*   2) Deduplica CUIs dentro de cada fuente.
-*   3) Concatena todas las fuentes y deduplica entre ellas; si un CUI aparece
-*      en varias hojas, concatenamos las etiquetas con " | ".
-*   4) Cruza con CUI_cartera_GN (CUI, cartera_gn): conserva los existentes con
-*      su etiqueta original y agrega sólo los CUIs que NO estaban, con la
-*      procedencia en la columna cartera_gn.
-*   5) Exporta CUI_cartera_GN_consolidado.xlsx con las hojas Consolidado,
-*      Solo_Nuevos y Todas_las_Fuentes.
+* Flujo:
+*   1) Importa cada hoja de Excel y la guarda como .dta en ${Output}.
+*   2) Con los .dta ya guardados, deduplica dentro de cada fuente, une todas
+*      las fuentes, deduplica entre ellas concatenando etiquetas.
+*   3) Cruza con CUI_cartera_GN y conserva sólo los CUIs que NO estaban,
+*      agregándolos con su procedencia en la columna cartera_gn.
+*   4) Exporta CUI_cartera_GN_consolidado.xlsx (hojas Consolidado,
+*      Solo_Nuevos, Todas_las_Fuentes).
 ********************************************************************************
 
 version 15
 clear all
 set more off
 
-* === Ajusta esta ruta a la carpeta donde están los archivos .xlsx ===
-global RUTA "C:/ruta/a/los/archivos"
-cd "$RUTA"
+* === Rutas ===
+global Input  "C:/ruta/a/los/excels"
+global Output "C:/ruta/a/los/dta"
+
+cap mkdir "${Output}"
 
 ********************************************************************************
-* Programa auxiliar: lee una hoja, toma la columna CUI indicada y etiqueta.
-* Guarda un tempfile con variables: CUI (string) y cartera_gn (string).
-* Uso: leer_cui, archivo("X.xlsx") hoja("H") colcui("CUI") etiqueta("...") ///
-*               salida(tempname)
+* PASO 1 — Importar cada Excel y guardarlo como .dta
 ********************************************************************************
-capture program drop leer_cui
-program define leer_cui
-    syntax , archivo(string) hoja(string) colcui(string) etiqueta(string) ///
-             salida(string)
 
-    clear
-    * Los títulos ocupan las 2 primeras filas; encabezados reales en la 3.
-    import excel using "`archivo'", sheet("`hoja'") cellrange(A3) firstrow ///
-        allstring
+* ---------- ANIN / Anexo 1 ----------
+import excel "${Input}/ANIN.xlsx", sheet("Anexo 1") cellrange(A3) firstrow ///
+    allstring clear
+rename CUIIDEA CUI
+keep CUI
+gen cartera_gn = "ANIN"
+save "${Output}/ANIN.dta", replace
 
-    * Renombra la columna CUI (el nombre viene con caracteres raros a veces)
-    capture confirm variable `colcui'
-    if _rc {
-        * Busca por etiqueta si el nombre no coincide textualmente
-        ds, has(varlabel "`colcui'")
-        local cvars `r(varlist)'
-        local colcui : word 1 of `cvars'
-    }
-    rename `colcui' CUI
+* ---------- PEIP / IMPLEMENTADOS ----------
+import excel "${Input}/PEIP.xlsx", sheet("IMPLEMENTADOS") cellrange(A3) firstrow ///
+    allstring clear
+keep CUI
+gen cartera_gn = "PEIP - IMPLEMENTADOS"
+save "${Output}/PEIP_IMPLEMENTADOS.dta", replace
 
-    * Limpieza: trim, quitar vacíos y basura
+* ---------- PEIP / CONTINGENCIA ----------
+import excel "${Input}/PEIP.xlsx", sheet("CONTINGENCIA") cellrange(A3) firstrow ///
+    allstring clear
+keep CUI
+gen cartera_gn = "PEIP - CONTINGENCIA"
+save "${Output}/PEIP_CONTINGENCIA.dta", replace
+
+* ---------- UGRD / PIRCC ----------
+import excel "${Input}/UGRD.xlsx", sheet("PIRCC") cellrange(A3) firstrow ///
+    allstring clear
+keep CUI
+gen cartera_gn = "UGRD - PIRCC"
+save "${Output}/UGRD_PIRCC.dta", replace
+
+* ---------- UGRD / MBR ----------
+import excel "${Input}/UGRD.xlsx", sheet("MBR") cellrange(A3) firstrow ///
+    allstring clear
+keep CUI
+gen cartera_gn = "UGRD - MBR"
+save "${Output}/UGRD_MBR.dta", replace
+
+* ---------- UGRD / ME ----------
+import excel "${Input}/UGRD.xlsx", sheet("ME") cellrange(A3) firstrow ///
+    allstring clear
+keep CUI
+gen cartera_gn = "UGRD - ME"
+save "${Output}/UGRD_ME.dta", replace
+
+* ---------- UGEO / UGEO ----------
+import excel "${Input}/UGEO.xlsx", sheet("UGEO") cellrange(A3) firstrow ///
+    allstring clear
+keep CUI
+gen cartera_gn = "UGEO - Obra Pública"
+save "${Output}/UGEO.dta", replace
+
+* ---------- CUI_cartera_GN (base existente) ----------
+import excel "${Input}/CUI_cartera_GN.xlsx", sheet("Hoja1") firstrow ///
+    allstring clear
+save "${Output}/CUI_cartera_GN.dta", replace
+
+
+********************************************************************************
+* PASO 2 — Limpieza y deduplicación dentro de cada .dta
+********************************************************************************
+
+foreach f in ANIN PEIP_IMPLEMENTADOS PEIP_CONTINGENCIA ///
+             UGRD_PIRCC UGRD_MBR UGRD_ME UGEO CUI_cartera_GN {
+
+    use "${Output}/`f'.dta", clear
     replace CUI = strtrim(CUI)
-    drop if missing(CUI) | inlist(CUI, "-", "—", ".", "nan", "NaN")
-
-    * Si vienen como "2503451.0" (float) nos quedamos con la parte entera
+    * Si viene como "2503451.0" nos quedamos con la parte entera
     replace CUI = substr(CUI, 1, strpos(CUI, ".")-1) if strpos(CUI, ".")>0
-
-    keep CUI
-    gen cartera_gn = "`etiqueta'"
-
-    * Deduplicación dentro de la fuente
+    drop if missing(CUI) | inlist(CUI, "-", "—", ".", "nan", "NaN")
     duplicates drop CUI, force
+    save "${Output}/`f'.dta", replace
+    display as result "  `f'.dta -> " _N " CUIs únicos"
+}
 
-    display as text "  `archivo' / `hoja' -> " _N " CUIs únicos"
-    save "`salida'", replace
-end
-
-********************************************************************************
-* 1) Cargar cada fuente en un tempfile
-********************************************************************************
-tempfile t_anin t_peip_imp t_peip_con t_ugrd_pircc t_ugrd_mbr t_ugrd_me t_ugeo
-
-display as result _n "Cargando fuentes:"
-leer_cui, archivo("ANIN.xlsx") hoja("Anexo 1")       colcui("CUIIDEA") ///
-          etiqueta("ANIN")                    salida("`t_anin'")
-leer_cui, archivo("PEIP.xlsx") hoja("IMPLEMENTADOS") colcui("CUI") ///
-          etiqueta("PEIP - IMPLEMENTADOS")   salida("`t_peip_imp'")
-leer_cui, archivo("PEIP.xlsx") hoja("CONTINGENCIA")  colcui("CUI") ///
-          etiqueta("PEIP - CONTINGENCIA")    salida("`t_peip_con'")
-leer_cui, archivo("UGRD.xlsx") hoja("PIRCC")         colcui("CUI") ///
-          etiqueta("UGRD - PIRCC")           salida("`t_ugrd_pircc'")
-leer_cui, archivo("UGRD.xlsx") hoja("MBR")           colcui("CUI") ///
-          etiqueta("UGRD - MBR")             salida("`t_ugrd_mbr'")
-leer_cui, archivo("UGRD.xlsx") hoja("ME")            colcui("CUI") ///
-          etiqueta("UGRD - ME")              salida("`t_ugrd_me'")
-leer_cui, archivo("UGEO.xlsx") hoja("UGEO")          colcui("CUI") ///
-          etiqueta("UGEO - Obra Pública")    salida("`t_ugeo'")
 
 ********************************************************************************
-* 2) Unir todas las fuentes y deduplicar entre ellas
-*    (si un CUI está en varias hojas, concatenamos etiquetas con " | ")
+* PASO 3 — Unir todas las fuentes y deduplicar entre ellas
+*   (si un CUI aparece en varias hojas, concatenamos etiquetas con " | ")
 ********************************************************************************
-use "`t_anin'", clear
-append using "`t_peip_imp'"
-append using "`t_peip_con'"
-append using "`t_ugrd_pircc'"
-append using "`t_ugrd_mbr'"
-append using "`t_ugrd_me'"
-append using "`t_ugeo'"
 
-* Eliminamos duplicados exactos CUI+etiqueta
+use "${Output}/ANIN.dta", clear
+append using "${Output}/PEIP_IMPLEMENTADOS.dta"
+append using "${Output}/PEIP_CONTINGENCIA.dta"
+append using "${Output}/UGRD_PIRCC.dta"
+append using "${Output}/UGRD_MBR.dta"
+append using "${Output}/UGRD_ME.dta"
+append using "${Output}/UGEO.dta"
+
 duplicates drop CUI cartera_gn, force
 
-* Concatenamos etiquetas por CUI
 bysort CUI (cartera_gn): gen _etq = cartera_gn
 bysort CUI (cartera_gn): replace _etq = _etq[_n-1] + " | " + cartera_gn if _n>1
 bysort CUI (cartera_gn): keep if _n == _N
 drop cartera_gn
 rename _etq cartera_gn
 
-tempfile t_fuentes
-save "`t_fuentes'", replace
-display as result _n "Total de CUIs únicos aportados por las fuentes: " _N
+save "${Output}/Todas_las_Fuentes.dta", replace
+display as result _n "Total CUIs únicos aportados por las fuentes: " _N
+
 
 ********************************************************************************
-* 3) Leer CUI_cartera_GN y dejar sólo CUIs nuevos que NO están ahí
+* PASO 4 — Cruce con CUI_cartera_GN: quedarnos sólo con los CUIs NUEVOS
 ********************************************************************************
-clear
-import excel using "CUI_cartera_GN.xlsx", sheet("Hoja1") firstrow allstring
-replace CUI = strtrim(CUI)
-replace CUI = substr(CUI, 1, strpos(CUI, ".")-1) if strpos(CUI, ".")>0
-drop if missing(CUI)
-duplicates drop CUI, force
-display as result "CUI_cartera_GN inicial: " _N " registros únicos"
 
-tempfile t_base
-save "`t_base'", replace
-
-* Marcar cuáles de las fuentes ya existían
-use "`t_fuentes'", clear
-merge 1:1 CUI using "`t_base'", keepusing(CUI) generate(_existe)
-keep if _existe == 1   // sólo en fuentes, no en base -> son los NUEVOS a agregar
+merge 1:1 CUI using "${Output}/CUI_cartera_GN.dta", keepusing(CUI) generate(_existe)
+keep if _existe == 1         // 1 = sólo en fuentes (no estaba en la base)
 drop _existe
-tempfile t_nuevos
-save "`t_nuevos'", replace
-display as result "CUIs nuevos a agregar (no estaban en CUI_cartera_GN): " _N
+save "${Output}/Solo_Nuevos.dta", replace
+display as result "CUIs nuevos a agregar: " _N
+
 
 ********************************************************************************
-* 4) Consolidado final = base original + nuevos
+* PASO 5 — Consolidado final = base original + nuevos
 ********************************************************************************
-use "`t_base'", clear
-append using "`t_nuevos'"
+
+use "${Output}/CUI_cartera_GN.dta", clear
+append using "${Output}/Solo_Nuevos.dta"
 duplicates drop CUI, force
 order CUI cartera_gn
+save "${Output}/CUI_cartera_GN_consolidado.dta", replace
 display as result _n "Total final en Consolidado: " _N " CUIs"
 
-* Exportar hoja Consolidado (sobrescribe el archivo si existe)
-export excel using "CUI_cartera_GN_consolidado.xlsx", ///
+
+********************************************************************************
+* PASO 6 — Exportar a Excel (3 hojas)
+********************************************************************************
+
+use "${Output}/CUI_cartera_GN_consolidado.dta", clear
+export excel using "${Output}/CUI_cartera_GN_consolidado.xlsx", ///
     sheet("Consolidado") sheetreplace firstrow(variables)
 
-* Exportar hoja Solo_Nuevos
-use "`t_nuevos'", clear
+use "${Output}/Solo_Nuevos.dta", clear
 order CUI cartera_gn
-export excel using "CUI_cartera_GN_consolidado.xlsx", ///
+export excel using "${Output}/CUI_cartera_GN_consolidado.xlsx", ///
     sheet("Solo_Nuevos") sheetreplace firstrow(variables)
 
-* Exportar hoja Todas_las_Fuentes
-use "`t_fuentes'", clear
+use "${Output}/Todas_las_Fuentes.dta", clear
 order CUI cartera_gn
-export excel using "CUI_cartera_GN_consolidado.xlsx", ///
+export excel using "${Output}/CUI_cartera_GN_consolidado.xlsx", ///
     sheet("Todas_las_Fuentes") sheetreplace firstrow(variables)
 
-display as result _n "Archivo generado: CUI_cartera_GN_consolidado.xlsx"
+display as result _n "Archivo generado: ${Output}/CUI_cartera_GN_consolidado.xlsx"

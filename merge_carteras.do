@@ -81,13 +81,17 @@ import excel "${Input}/CUI_cartera_GN.xlsx", sheet("Hoja1") firstrow ///
     allstring clear
 save "${Output}/CUI_cartera_GN.dta", replace
 
+* ---------- BI (Banco de Inversiones) ----------
+import excel "${Input}/BI.xlsx", sheet("Hoja1") firstrow allstring clear
+save "${Output}/BI.dta", replace
+
 
 ********************************************************************************
 * PASO 2 — Limpieza y deduplicación dentro de cada .dta
 ********************************************************************************
 
 foreach f in ANIN PEIP_IMPLEMENTADOS PEIP_CONTINGENCIA ///
-             UGRD_PIRCC UGRD_MBR UGRD_ME UGEO CUI_cartera_GN {
+             UGRD_PIRCC UGRD_MBR UGRD_ME UGEO CUI_cartera_GN BI {
 
     use "${Output}/`f'.dta", clear
     replace CUI = strtrim(CUI)
@@ -165,5 +169,27 @@ use "${Output}/Todas_las_Fuentes.dta", clear
 order CUI cartera_gn
 export excel using "${Output}/CUI_cartera_GN_consolidado.xlsx", ///
     sheet("Todas_las_Fuentes") sheetreplace firstrow(variables)
+
+
+********************************************************************************
+* PASO 7 — Cruce con BI (Banco de Inversiones)
+*   Identifica CUIs que están en BI pero NO en el consolidado de carteras.
+********************************************************************************
+
+use "${Output}/BI.dta", clear
+merge 1:1 CUI using "${Output}/CUI_cartera_GN_consolidado.dta", ///
+    keepusing(CUI) generate(_existe_cart)
+keep if _existe_cart == 1   // sólo en BI, no en ninguna cartera
+drop _existe_cart
+
+keep CUI NOMBRE_INVERSION SECTOR ENTIDAD NOM_UEP ESTADO SITUACION ///
+     TIPO_INVERSION DES_TIPOLOGIA COSTO_ACTUALIZADO DEPARTAMENTO ///
+     PROVINCIA DISTRITO FECHA_REGISTRO FECHA_VIABILIDAD
+sort ESTADO NOM_UEP CUI
+save "${Output}/BI_no_en_Carteras.dta", replace
+display as result _n "CUIs del BI que NO están en las carteras GN: " _N
+
+export excel using "${Output}/CUI_cartera_GN_consolidado.xlsx", ///
+    sheet("BI_no_en_Carteras") sheetreplace firstrow(variables)
 
 display as result _n "Archivo generado: ${Output}/CUI_cartera_GN_consolidado.xlsx"

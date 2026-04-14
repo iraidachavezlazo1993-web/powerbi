@@ -95,12 +95,34 @@ def main():
     consolidado = pd.concat([base_gn, a_agregar], ignore_index=True)
     consolidado = consolidado.drop_duplicates(subset=["CUI"]).reset_index(drop=True)
 
-    # 4) Exportar
+    # 4) Cruce con BI (Banco de Inversiones) para detectar CUIs faltantes
+    bi_path = BASE / "BI.xlsx"
+    faltantes_bi = pd.DataFrame()
+    if bi_path.exists():
+        bi = pd.read_excel(bi_path, sheet_name="Hoja1")
+        bi["CUI"] = bi["CUI"].map(normaliza_cui)
+        bi = bi.dropna(subset=["CUI"]).drop_duplicates(subset=["CUI"])
+        print(f"\nBI (Banco de Inversiones): {len(bi)} CUIs únicos")
+
+        faltantes_bi = bi[~bi["CUI"].isin(set(consolidado["CUI"]))].copy()
+        cols_bi = ["CUI", "NOMBRE_INVERSION", "SECTOR", "ENTIDAD", "NOM_UEP",
+                   "ESTADO", "SITUACION", "TIPO_INVERSION", "DES_TIPOLOGIA",
+                   "COSTO_ACTUALIZADO", "DEPARTAMENTO", "PROVINCIA", "DISTRITO",
+                   "FECHA_REGISTRO", "FECHA_VIABILIDAD"]
+        faltantes_bi = faltantes_bi[[c for c in cols_bi if c in faltantes_bi.columns]]
+        faltantes_bi = faltantes_bi.sort_values(["ESTADO", "NOM_UEP", "CUI"])
+        print(f"CUIs del BI que NO están en las carteras GN: {len(faltantes_bi)}")
+        if not faltantes_bi.empty:
+            print("  Por ESTADO:", dict(faltantes_bi["ESTADO"].value_counts()))
+
+    # 5) Exportar
     salida = BASE / "CUI_cartera_GN_consolidado.xlsx"
     with pd.ExcelWriter(salida, engine="openpyxl") as w:
         consolidado.to_excel(w, sheet_name="Consolidado", index=False)
         a_agregar.to_excel(w, sheet_name="Solo_Nuevos", index=False)
         nuevos.to_excel(w, sheet_name="Todas_las_Fuentes", index=False)
+        if not faltantes_bi.empty:
+            faltantes_bi.to_excel(w, sheet_name="BI_no_en_Carteras", index=False)
     print(f"\nArchivo generado: {salida.name}")
     print(f"Total final en 'Consolidado': {len(consolidado)} CUIs")
 

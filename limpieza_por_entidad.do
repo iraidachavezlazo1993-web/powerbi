@@ -123,6 +123,40 @@ program define ren_if
 end
 
 
+* ----- rename_from_label ----------------------------------------------------
+* Si una variable tiene nombre de 1 o 2 letras (lo que pasa cuando Stata
+* no pudo construir un nombre desde el header, o choca con otro nombre
+* truncado), reconstruye el nombre desde el variable label, normalizado
+* a snake_case ASCII <=32 chars.
+capture program drop rename_from_label
+program define rename_from_label
+    quietly ds
+    local used " `r(varlist)' "
+    foreach v in `r(varlist)' {
+        if !regexm("`v'", "^[A-Za-z]{1,2}$") continue
+        local lbl : variable label `v'
+        if `"`lbl'"' == "" continue
+        local nn = ustrlower(ustrnormalize(`"`lbl'"', "nfd"))
+        local nn = ustrregexra("`nn'", "\p{Mn}", "")
+        local nn = ustrregexra("`nn'", "[^a-z0-9]+", "_")
+        local nn = ustrregexra("`nn'", "^_+|_+$", "")
+        if "`nn'" == "" continue
+        if regexm("`nn'", "^[0-9]") local nn "v_`nn'"
+        local nn = substr("`nn'", 1, 32)
+        * desambiguar
+        local base "`nn'"
+        local i = 1
+        while strpos("`used'", " `nn' ") > 0 {
+            local suf = "_`i'"
+            local nn = substr("`base'", 1, 32 - strlen("`suf'")) + "`suf'"
+            local ++i
+        }
+        capture rename `v' `nn'
+        if !_rc local used "`used'`nn' "
+    }
+end
+
+
 * ----- canon_rename : aplica diccionario comun a Unicode/Stata var names ----
 capture program drop canon_rename
 program define canon_rename
@@ -226,6 +260,53 @@ program define canon_rename
     ren_if COMENTARIO                     comentario_general
     ren_if ComentariosOtrasvariablesq     comentario_general
     ren_if ComentariosOtrasvariablesQ     comentario_general
+
+    * Variantes adicionales observadas en ANIN, FONCODES, etc.
+    ren_if Ord                            ord
+    ren_if NOMBRECORTO                    nombre_corto
+    ren_if NOMBREDELAINVERSIÓN            nombre_inversion
+    ren_if DEAVANCEDISEÑO                 avance_diseno
+    ren_if DEAVANCEFÍSICODEOBRA           avance_fisico
+    ren_if COSTOACTUALIZADO               monto_inversion
+    ren_if DEVENGADOACUMULADO             devengado
+    ren_if AvanceFinanciero               avance_financiero
+    ren_if PAM2025                        pam_2025
+    ren_if PAM2026                        pam_2026
+    ren_if CONVENIOMANTENIMIENTO          convenio_mantenimiento
+    ren_if CONVENIO                       convenio_mantenimiento
+    ren_if ESTADO                         estado
+    ren_if ESTADOA                        estado_convenio
+    ren_if EstadoA                        estado_convenio
+    ren_if NOMBRECONVENIO                 nombre_convenio
+
+    * FONCODES cabeceras mayusculas
+    ren_if CODIGODELLOCALEDUCATIVO        codigo_local
+    ren_if NOMBREDELPROYECTO              nombre_inversion
+    ren_if TIPODELAINVERSIÓN              tipo_inversion
+    ren_if ESTADODELAINVERSIÓN            estado
+    ren_if MONTODELAINVERSIÓNSOLES        monto_inversion
+    ren_if AVANCEFÍSICO                   avance_fisico
+    ren_if FECHADEINICIODEOBRA            fecha_inicio
+    ren_if FECHADECULMINACIÓNDEOBRA       fecha_culminacion
+    ren_if FECHADELIQUIDACIÓN             fecha_liquidacion
+    ren_if FECHADERECEPCIÓNDEOBRA         fecha_recepcion
+    ren_if NOMBREIE                       nombre_ie
+
+    * PEIP / CONTINGENCIA
+    ren_if CantidaddemódulosPRONIED       cantidad_modulos_pronied
+    ren_if CantidaddemódulosPEIP          cantidad_modulos_peip
+    ren_if Añodeinstalacióndelosmódulo    ano_instalacion_modulos
+
+    * PEIP / MANTENIMIENTO - alcance / plan
+    ren_if CuentaconPlanoManualdeMa       cuenta_plan_mantenimiento
+    ren_if AlcancedelPlanoManualMan       alcance_plan_mantenimiento
+    ren_if AñodelaentregadelPEIP          ano_entrega_peip
+    ren_if Fechadeiniciodelmantenimien    fecha_inicio_mantenimiento
+    ren_if Fechadeculminacióndemantenim   fecha_culminacion_mantenimiento
+
+    * Conservar codigos de columna unica que no son junk
+    ren_if Programa                       programa
+    ren_if PROGRAMA                       programa
 end
 
 
@@ -239,6 +320,12 @@ end
 *   - order canonico
 capture program drop post_clean
 program define post_clean
+    * Recuperar nombres desde labels en vars con nombre-letra (A, B, G, ...)
+    rename_from_label
+
+    * Reaplicar diccionario (por si el rename_from_label expuso nombres nuevos)
+    canon_rename
+
     * Strings
     quietly ds, has(type string)
     foreach v in `r(varlist)' {
@@ -276,9 +363,9 @@ program define post_clean
         if !_rc clean_code `c', digits(7)
     }
 
-    * Fechas
-    quietly ds fecha*, has(type string)
-    if "`r(varlist)'" != "" {
+    * Fechas (protegido: ds fecha* falla si ninguna variable matchea)
+    capture ds fecha*, has(type string)
+    if !_rc & `"`r(varlist)'"' != "" {
         foreach v in `r(varlist)' {
             clean_date `v'
         }

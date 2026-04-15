@@ -370,8 +370,8 @@ program define clean_one
     }
 
     * -------- 7. PARSEAR FECHAS (cualquier variable que empiece con fecha_) --
-    quietly ds fecha*, has(type string)
-    if "`r(varlist)'" != "" {
+    capture ds fecha*, has(type string)
+    if !_rc & `"`r(varlist)'"' != "" {
         foreach v in `r(varlist)' {
             clean_date `v'
         }

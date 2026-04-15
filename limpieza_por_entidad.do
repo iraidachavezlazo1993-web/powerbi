@@ -247,8 +247,8 @@ program define post_clean
         quietly replace `v' = subinstr(`v', char(9),  " ", .)
         quietly replace `v' = strtrim(stritrim(`v'))
         quietly replace `v' = "" if inlist(ustrlower(`v'), ///
-            "-","--","---","----","-----","------", ///
-            "n/a","na","n.a.","nan","none","null",".","..", "s/d","s/i")
+            "-","--","---","----","-----","------","n/a","na","n.a.") ///
+            | inlist(ustrlower(`v'), "nan","none","null",".","..","s/d","s/i")
     }
 
     * Filas 100% vacias

@@ -325,9 +325,8 @@ program define clean_one
         quietly replace `v' = subinstr(`v', char(9),  " ", .)
         quietly replace `v' = strtrim(stritrim(`v'))
         quietly replace `v' = "" if inlist(ustrlower(`v'), ///
-            "-","--","---","----","-----","------","-------", ///
-            "n/a","na","n.a.","nan","none","null",".","..", ///
-            "s/d","s/i","-.",".-")
+            "-","--","---","----","-----","------","-------","n/a","na") ///
+            | inlist(ustrlower(`v'), "n.a.","nan","none","null",".","..","s/d","s/i","-.",".-")
     }
 
     * -------- 4. DROP FILAS 100% VACIAS --------------------------------

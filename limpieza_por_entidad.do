@@ -1420,9 +1420,9 @@ if !_rc {
 * --- Tipo de intervencion general -------------------------------------------
 gen tipo_intervencion_gral = ""
 replace tipo_intervencion_gral = "PROYECTO"             if inlist(unidad, ///
-    "UGEO","UGRD_MBR","UGRD_ME","UGRD_PIRCC","UGSC_SEGUIMIENTO", ///
-    "ANIN_IRI","PEIP_IMPLEMENTADOS","UE118_PMESUT","UE118_PMESTP", ///
-    "FONCODES_LE_INTERVENIDOS")
+    "UGEO","UGRD_MBR","UGRD_ME","UGRD_PIRCC","UGSC_SEGUIMIENTO") ///
+    | inlist(unidad, "ANIN_IRI","PEIP_IMPLEMENTADOS", ///
+    "UE118_PMESUT","UE118_PMESTP","FONCODES_LE_INTERVENIDOS")
 replace tipo_intervencion_gral = "MANTENIMIENTO"        if inlist(unidad, ///
     "UGM_MANTENIMIENTO_2025","UGM_MANTENIMIENTO_2026", ///
     "PEIP_MANTENIMIENTO","ANIN_MANTENIMIENTO") ///

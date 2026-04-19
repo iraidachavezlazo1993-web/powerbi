@@ -331,10 +331,46 @@ program define canon_rename
 
     * PEIP / MANTENIMIENTO - alcance / plan
     ren_if CuentaconPlanoManualdeMa       cuenta_plan_mantenimiento
+    ren_if CuentaconPlanoManualdeMantenimie cuenta_plan_mantenimiento
     ren_if AlcancedelPlanoManualMan       alcance_plan_mantenimiento
+    ren_if AlcancedelPlanoManualMantenimien alcance_plan_mantenimiento
+    ren_if ALCANCEActivosintervenidosequipa alcance_activos
     ren_if AñodelaentregadelPEIP          ano_entrega_peip
     ren_if Fechadeiniciodelmantenimien    fecha_inicio_mantenimiento
+    ren_if Fechadeiniciodelmantenimientooes fecha_inicio_mantenimiento
     ren_if Fechadeculminacióndemantenim   fecha_culminacion_mantenimiento
+    ren_if Fechadeculminacióndemantenimient fecha_culminacion_mantenimiento
+
+    * PEIP / MANTENIMIENTO - montos duplicados: Stata 15 usa letra de col Excel
+    * cuando la cabecera truncada colisiona. Otras versiones usan sufijo numerico.
+    * Cubrimos ambas variantes con ren_if (solo se ejecuta si existe).
+    * Rutinario
+    ren_if Montoanualdemantenimientorecurre monto_rutinario_2025
+    ren_if Montoanualdemantenimientorec    monto_rutinario_2025
+    ren_if Montoanualdemantenimientorecur1 monto_rutinario_2026
+    ren_if G                               monto_rutinario_2026
+    ren_if Montoanualdemantenimientorecur2 monto_rutinario_2027
+    ren_if H                               monto_rutinario_2027
+    ren_if Montoanualdemantenimientorecur3 monto_rutinario_2028
+    ren_if I                               monto_rutinario_2028
+    * Preventivo
+    ren_if Montoanualdemantenimientoprevent monto_preventivo_2025
+    ren_if Montoanualdemantenimientopre    monto_preventivo_2025
+    ren_if Montoanualdemantenimientopreve1 monto_preventivo_2026
+    ren_if K                               monto_preventivo_2026
+    ren_if Montoanualdemantenimientopreve2 monto_preventivo_2027
+    ren_if L                               monto_preventivo_2027
+    ren_if Montoanualdemantenimientopreve3 monto_preventivo_2028
+    ren_if M                               monto_preventivo_2028
+    * Correctivo
+    ren_if Montoanualdemantenimientocorrect monto_correctivo_2025
+    ren_if Montoanualdemantenimientocor    monto_correctivo_2025
+    ren_if Montoanualdemantenimientocorre1 monto_correctivo_2026
+    ren_if O                               monto_correctivo_2026
+    ren_if Montoanualdemantenimientocorre2 monto_correctivo_2027
+    ren_if P                               monto_correctivo_2027
+    ren_if Montoanualdemantenimientocorre3 monto_correctivo_2028
+    ren_if Q                               monto_correctivo_2028
 
     * Conservar codigos de columna unica que no son junk
     ren_if Programa                       programa
@@ -344,13 +380,20 @@ program define canon_rename
     ren_if CUIIRI                         cui
     ren_if NombredelIRI                   nombre_inversion
     ren_if MontoDevengado                 devengado
+    ren_if Montodelainversiónactualizado  monto_inversion
+    ren_if Montodelaintervencióntotal     monto_inversion
     ren_if Montodelaintervencion2025      monto_intervencion_2025
     ren_if Montodelaintervencion2026      monto_intervencion_2026
     ren_if Montodelaintervencion2027      monto_intervencion_2027
     ren_if Montodelaintervencion2028      monto_intervencion_2028
-    ren_if Montodelaintervencionlto       monto_inversion
+    ren_if Montodelaintervención2025      monto_intervencion_2025
+    ren_if Montodelaintervención2026      monto_intervencion_2026
+    ren_if Montodelaintervención2027      monto_intervencion_2027
+    ren_if Montodelaintervención2028      monto_intervencion_2028
     ren_if AñodelaentregadelaIRI          ano_entrega
+    ren_if Activointervenidoequipamientoedu activo_intervenido
     ren_if Activointervenidoequipa        activo_intervenido
+    ren_if Tipodemantenimientoaejecutardeac tipo_mantenimiento
     ren_if Tipodemantenimientoaeje        tipo_mantenimiento
 
     * --- Variables de UGSC / UGME / UGM / UZ ---------------------------------
@@ -364,8 +407,57 @@ program define canon_rename
     ren_if FechadecaducidaddelET          fecha_caducidad_et
     ren_if Fechadecaducidaddelet          fecha_caducidad_et
 
+    * UGSC
+    ren_if Cantidaddelocaleseducativosinter cantidad_locales
+    ren_if EstadoAdmitidoContinuidadCulmina estado
+    ren_if EtapaCostosCulminadoEspecialidad etapa_obra
+    ren_if FechadeaprobacióndelExpedienteTé fecha_aprobacion_et
+    ren_if FechadecaducidaddelET          fecha_caducidad_et
+    ren_if Añodelaprimeratransferencia    ano_primera_transferencia
+    ren_if Añodelaúltimatransferencia     ano_ultima_transferencia
+    ren_if Documentodelatransferenciaagrega doc_transferencia
+    ren_if EstadodelproyectodeinversiónPIen estado
+    ren_if MontodeInversiónS              monto_inversion
+    ren_if TransferenciatotalS            monto_transferido
+
+    * UE118
+    ren_if Códigodellocaleducativo        codigo_local
+    ren_if CódigoÚnicodeInversionesCUI    cui
+    ren_if NombrelargoPI                  nombre_inversion
+    ren_if NombrecortoPI                  nombre_corto
+    ren_if Estadodelaintervención         estado
+    ren_if MontototaldeinversiónS         monto_inversion
+    ren_if Riesgosoalertasidentificadas   riesgos
+    ren_if Medidasdeacciónopropuestasdeinte medidas_accion
+    ren_if Fechaestimada                  fecha_estimada
+
+    * FONCODES
+    ren_if CódigodelLocalEducativo        codigo_local
+    ren_if CódigoÚnicodeInversionesCUI    cui
+    ren_if NombredelProyecto              nombre_inversion
+    ren_if TipodelaInversión              tipo_inversion
+    ren_if EstadodelaInversión            estado
+    ren_if MontodelaInversiónSoles        monto_inversion
+    ren_if AvanceFísico                   avance_fisico
+    ren_if FechadeIniciodeObra            fecha_inicio
+    ren_if FechadeCulminacióndeObra       fecha_culminacion
+    ren_if FechadeLiquidación             fecha_liquidacion
+    ren_if FechadeRecepcióndeObra         fecha_recepcion
+    ren_if CODIGOMODULAR                  codigo_modular
+    ren_if CODMODULAR                     codigo_modular
+    ren_if NOMBREIE                       nombre_ie
+    ren_if TIPODEMANTENIMIENTO            tipo_mantenimiento
+    ren_if MONTODELAINTERVENCIÓN2025      monto_inversion
+    ren_if MONTODELAINTERVENCIÓN2026      monto_inversion
+    ren_if ESTADOPROYECTO                 estado
+    ren_if FECHADEINICIO                  fecha_inicio
+    ren_if FECHADECULMINACIÓN             fecha_culminacion
+    ren_if FECHADECULMINACIONESTIMADA     fecha_culminacion
+
     * UGME
     ren_if Códigomodular                  codigo_modular
+    ren_if GrupoAulaDomoAulaModularEscuelaM grupo_bien
+    ren_if GrupoMobiliarioEquipamiento    grupo_bien
     ren_if Grupo                          grupo_bien
     ren_if AulaDomoAulaMo                 grupo_bien
     ren_if Descripcióndelbien             descripcion_bien
@@ -379,18 +471,35 @@ program define canon_rename
     ren_if Fasedelproceso                 fase_obra
     ren_if Etapadelproceso                etapa_obra
 
+    * UGME extras
+    ren_if FechadeentregaoestimadaPECOSA  fecha_entrega
+    ren_if EstadoInstaladoDonadoetc       estado
+    ren_if EstadoNoiniciadoenprocesoculmina estado
+    ren_if CapacidadoperativasoloEscuelaMod capacidad_operativa
+    ren_if MontocontractualS              monto_inversion
+
     * UGM
     ren_if Año                            anio
     ren_if AÑODEINSTALACIÓN               ano_instalacion
+    ren_if Tipodeintervenciónmantenimientoc tipo_intervencion
     ren_if Tipodeintervenciónman          tipo_intervencion
     ren_if Fechaestimadadeentrega         fecha_entrega
+    ren_if MontoasignadoparamantenimientoS monto_asignado
     ren_if Montoasignadopara              monto_asignado
-    ren_if Montoasignadototal             monto_asignado_total
     ren_if MontoasignadototalS            monto_asignado_total
-    ren_if Montotransferido               monto_transferido
+    ren_if Montoasignadototal             monto_asignado_total
     ren_if MontotransferidoS              monto_transferido
+    ren_if Montotransferido               monto_transferido
+    ren_if Montoasignadopararutassolidarias monto_rutas_acceso
     ren_if Montoasignadopararutas         monto_rutas_acceso
+    ren_if EstadodelaFichadeAccionesdeMante estado_ficha
+    ren_if EstadodelaFichadeAccionesdeAcond estado_ficha
     ren_if EstadodelaFichadeAcc           estado_ficha
+    ren_if MontototaldelaFAM              monto_total_fam
+    ren_if MontototaldelaFAA              monto_total_faa
+    ren_if EstadodelaDeclaracióndeGastosDG estado_declaracion_gasto
+    ren_if MontototaldelaDG               monto_total_dg
+    ren_if Códigosmodularesdellocaleducativ codigos_modulares
     ren_if Códigosmodularesdelloc         codigos_modulares
     ren_if Codigosmodularesdelloc         codigos_modulares
 
@@ -645,26 +754,11 @@ import excel "${Input}/PEIP.xlsx", sheet("MANTENIMIENTO") cellrange(A3) firstrow
 
 capture drop N
 
-* rutinario (col F-I)
-capture rename Montoanualdemantenimientorec monto_rutinario_2025
-capture rename G monto_rutinario_2026
-capture rename H monto_rutinario_2027
-capture rename I monto_rutinario_2028
-* preventivo (col J-M)
-capture rename Montoanualdemantenimientopre monto_preventivo_2025
-capture rename K monto_preventivo_2026
-capture rename L monto_preventivo_2027
-capture rename M monto_preventivo_2028
-* correctivo (col N-Q)
-capture rename Montoanualdemantenimientocor monto_correctivo_2025
-capture rename O monto_correctivo_2026
-capture rename P monto_correctivo_2027
-capture rename Q monto_correctivo_2028
-
-destring monto_*, replace force
-
+* Los renames de montos duplicados estan en canon_rename (cubre tanto
+* letra de columna como sufijo numerico segun version de Stata).
 canon_rename
 post_clean
+destring monto_*, replace force
 duplicates drop
 save "${Output}/PEIP_MANTENIMIENTO.dta", replace
 di as res "PEIP_MANTENIMIENTO: " _N " obs"
@@ -882,8 +976,10 @@ capture {
 import excel "${Input}/UE118.xlsx", sheet("PMESUT") cellrange(A2) firstrow ///
     allstring clear
 
-capture drop A                          /* primera columna vacia */
-capture rename Programa programa
+* primera columna vacia (Stata la llama A, Unnamed0, o col)
+foreach x in A Unnamed0 col {
+    capture drop `x'
+}
 
 canon_rename
 post_clean
@@ -896,8 +992,9 @@ di as res "UE118_PMESUT: " _N " obs"
 import excel "${Input}/UE118.xlsx", sheet("PMESTP") cellrange(A2) firstrow ///
     allstring clear
 
-capture drop A
-capture rename Programa programa
+foreach x in A Unnamed0 col {
+    capture drop `x'
+}
 
 canon_rename
 post_clean

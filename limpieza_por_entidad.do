@@ -340,6 +340,19 @@ program define canon_rename
     ren_if Programa                       programa
     ren_if PROGRAMA                       programa
 
+    * --- ANIN (nuevas hojas IRI / MANTENIMIENTO) ---
+    ren_if CUIIRI                         cui
+    ren_if NombredelIRI                   nombre_inversion
+    ren_if MontoDevengado                 devengado
+    ren_if Montodelaintervencion2025      monto_intervencion_2025
+    ren_if Montodelaintervencion2026      monto_intervencion_2026
+    ren_if Montodelaintervencion2027      monto_intervencion_2027
+    ren_if Montodelaintervencion2028      monto_intervencion_2028
+    ren_if Montodelaintervencionlto       monto_inversion
+    ren_if AñodelaentregadelaIRI          ano_entrega
+    ren_if Activointervenidoequipa        activo_intervenido
+    ren_if Tipodemantenimientoaeje        tipo_mantenimiento
+
     * --- Variables de UGSC / UGME / UGM / UZ ---------------------------------
     ren_if Cantidaddelocaleseducativos    cantidad_locales
     ren_if Cantidaddelocaleseducativ      cantidad_locales
@@ -555,27 +568,32 @@ end
 * PASO 1 - Importar cada Excel, renombrar/limpiar y guardar .dta
 *============================================================================
 
-* ---------- ANIN / Anexo 1 --------------------------------------------------
-import excel "${Input}/ANIN.xlsx", sheet("Anexo 1") cellrange(A3) firstrow ///
+* ---------- ANIN / IRI (Inversiones en Rehabilitacion de Infraestructura) ----
+import excel "${Input}/ANIN.xlsx", sheet("IRI") cellrange(A3) firstrow ///
     allstring clear
 
-capture rename CUIÍDEA                     CUI
-capture rename CulminadosEntregadosFecha   DETALLE
-
-* DETALLE + COMENTARIO -> COMENTARIO_GENERAL
-gen COMENTARIO_GENERAL = DETALLE
-replace COMENTARIO_GENERAL = COMENTARIO if missing(DETALLE) | DETALLE == ""
-replace COMENTARIO_GENERAL = DETALLE + " | " + COMENTARIO ///
-    if !missing(DETALLE) & DETALLE != "" & !missing(COMENTARIO) & COMENTARIO != ""
-drop DETALLE COMENTARIO
+capture drop N
+duplicates drop
 
 canon_rename
-rename COMENTARIO_GENERAL comentario_general
-
 post_clean
 duplicates drop cui, force
-save "${Output}/ANIN.dta", replace
-di as res "ANIN: " _N " obs"
+save "${Output}/ANIN_IRI.dta", replace
+di as res "ANIN_IRI: " _N " obs"
+
+
+* ---------- ANIN / MANTENIMIENTO --------------------------------------------
+capture {
+    import excel "${Input}/ANIN.xlsx", sheet("MANTENIMIENTO") cellrange(A2) ///
+        firstrow allstring clear
+    capture drop N
+    duplicates drop
+
+    canon_rename
+    post_clean
+    save "${Output}/ANIN_MANTENIMIENTO.dta", replace
+    di as res "ANIN_MANTENIMIENTO: " _N " obs"
+}
 
 
 * ---------- PEIP / IMPLEMENTADOS --------------------------------------------
@@ -926,23 +944,24 @@ di as res "FONCODES_MANT_2026: " _N " obs"
 
 
 * ---------- MEF / Banco de Inversiones (auxiliar) ---------------------------
+* Si ya existe la .dta, la abre directamente (mucho mas rapido que importar
+* el Excel de 136 columnas cada vez). Solo importa de Excel la primera vez.
 capture {
-    import excel "${Input}/2026.04.13 Base de Inversiones.xlsx", sheet("Data") ///
-        cellrange(A5) firstrow allstring clear
-
-    * Nombres ya vienen en MAYUSCULAS snake-ish. Solo mapear lo basico.
-    capture rename CODIGO_UNICO      cui
-    capture rename CODIGO_SNIP       cui_snip
-    capture rename CODIGO_IDEA       cui_idea
-    capture rename NOMBRE_INVERSION  nombre_inversion
-    capture rename DEPARTAMENTO_CUI  departamento
-    capture rename PROVINCIA_CUI     provincia
-    capture rename DISTRITO          distrito
-
-    post_clean
-    duplicates drop
-    save "${Output}/MEF_Base_Inversiones.dta", replace
-    di as res "MEF_Base_Inversiones: " _N " obs"
+    capture confirm file "${Output}/MEF_Base_Inversiones.dta"
+    if _rc {
+        * Primera vez: importar desde Excel y limpiar
+        import excel "${Input}/2026.04.13 Base de Inversiones.xlsx", sheet("Data") ///
+            cellrange(A5) firstrow allstring clear
+        canon_rename
+        post_clean
+        duplicates drop
+        save "${Output}/MEF_Base_Inversiones.dta", replace
+        di as res "MEF_Base_Inversiones: importado de Excel -> " _N " obs"
+    }
+    else {
+        use "${Output}/MEF_Base_Inversiones.dta", clear
+        di as res "MEF_Base_Inversiones: cargado de .dta -> " _N " obs"
+    }
 }
 
 
@@ -1053,7 +1072,7 @@ capture {
                       UZ_INSPECCIONES UZ_ASESORAMIENTO
     local M_PEIP      PEIP_IMPLEMENTADOS PEIP_CONTINGENCIA PEIP_MANTENIMIENTO
     local M_UE118     UE118_PMESUT UE118_PMESTP
-    local M_ANIN      ANIN
+    local M_ANIN      ANIN_IRI ANIN_MANTENIMIENTO
     local M_FONCODES  FONCODES_LE_INTERVENIDOS FONCODES_MANT_2025 FONCODES_MANT_2026
 
     foreach ent in PRONIED PEIP UE118 ANIN FONCODES {

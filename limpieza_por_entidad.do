@@ -1145,17 +1145,102 @@ capture {
 
 
 *============================================================================
-* PASO 3 - BASE_PANORAMA: append de TODAS las entidades + merge con MEF para
-*          rellenar geografia (departamento/provincia/distrito/uf/ue/opmi/etc.)
+* PASO 3 - BASE_PANORAMA: consolidada a nivel de intervencion/local.
+*   - De cada .dta limpia extrae solo las variables canonicas clave.
+*   - Append con etiquetas (entidad, unidad).
+*   - Merge con MEF Banco de Inversiones para enriquecer geografia
+*     (departamento, provincia, distrito), unidad ejecutora, UF/OPMI,
+*     costo actualizado, devengado, PIM, PIA, fechas del ET, situacion,
+*     cartera PMI, funcion, sector, pliego.
+*   - Guarda una .dta de panorama con pocas columnas pero consistentes.
 *============================================================================
-* La idea: una sola .dta que junta todas las intervenciones con una columna
-* `entidad` y `unidad` que identifican de donde viene cada fila, y con las
-* variables de BI enriquecidas cuando existe CUI.
+
+* Variables canonicas que se conservan en el panorama (si existen en la base).
+* Si no existe en esa base, la crea como missing para que el append no explote.
+capture program drop prep_panorama
+program define prep_panorama
+    * Llaves
+    foreach v in cui codigo_local codigo_modular codigos_modulares {
+        capture confirm variable `v'
+        if _rc gen `v' = ""
+        capture confirm string variable `v'
+        if _rc tostring `v', replace force
+    }
+    * Identificacion
+    foreach v in nombre_ie nombre_inversion nombre_corto {
+        capture confirm variable `v'
+        if _rc gen `v' = ""
+        capture confirm string variable `v'
+        if _rc tostring `v', replace force
+    }
+    * Geografia (desde la base original; se complementa luego con BI)
+    foreach v in departamento provincia distrito ubigeo {
+        capture confirm variable `v'
+        if _rc gen `v' = ""
+        capture confirm string variable `v'
+        if _rc tostring `v', replace force
+    }
+    * Categoricas
+    foreach v in estado fase_obra etapa_obra situacion ///
+                 tipo_inversion tipo_intervencion tipo_mantenimiento ///
+                 tipo_sistema_modular unidad_zonal comentario_general {
+        capture confirm variable `v'
+        if _rc gen `v' = ""
+        capture confirm string variable `v'
+        if _rc tostring `v', replace force
+    }
+    * Numericas (montos y avances)
+    foreach v in monto_inversion monto_asignado_total monto_transferido ///
+                 monto_total_fam monto_total_faa monto_total_dg ///
+                 devengado pim pia costo_actualizado_bi ///
+                 avance_fisico avance_financiero ///
+                 cantidad_modulos_pronied cantidad_modulos_peip ///
+                 total_bienes capacidad_operativa {
+        capture confirm variable `v'
+        if _rc gen double `v' = .
+        capture confirm numeric variable `v'
+        if _rc destring `v', replace force
+    }
+    * Fechas
+    foreach v in fecha_inicio fecha_culminacion fecha_entrega ///
+                 fecha_recepcion fecha_inauguracion fecha_liquidacion ///
+                 fecha_inicio_et fecha_fin_et fecha_inspeccion fecha_evento {
+        capture confirm variable `v'
+        if _rc gen `v' = .
+        capture confirm numeric variable `v'
+        if _rc {
+            capture gen double __tmp = daily(`v', "YMD") if `v' != ""
+            capture replace __tmp = daily(`v', "DMY") if missing(__tmp) & `v' != ""
+            drop `v'
+            rename __tmp `v'
+        }
+        format `v' %td
+    }
+
+    * Quedate solo con las vars canonicas + entidad/unidad
+    keep cui codigo_local codigo_modular codigos_modulares ///
+         nombre_ie nombre_inversion nombre_corto ///
+         departamento provincia distrito ubigeo ///
+         estado fase_obra etapa_obra situacion ///
+         tipo_inversion tipo_intervencion tipo_mantenimiento ///
+         tipo_sistema_modular unidad_zonal ///
+         monto_inversion monto_asignado_total monto_transferido ///
+         monto_total_fam monto_total_faa monto_total_dg ///
+         devengado pim pia costo_actualizado_bi ///
+         avance_fisico avance_financiero ///
+         cantidad_modulos_pronied cantidad_modulos_peip ///
+         total_bienes capacidad_operativa ///
+         fecha_inicio fecha_culminacion fecha_entrega ///
+         fecha_recepcion fecha_inauguracion fecha_liquidacion ///
+         fecha_inicio_et fecha_fin_et fecha_inspeccion fecha_evento ///
+         comentario_general
+end
+
 
 capture {
     clear
     tempfile panorama
-    save `panorama', emptyok
+    save `panorama', emptyok replace
 
     * Mapa entidad -> lista de archivos
     local M_PRONIED   UGEO UGRD_PIRCC UGRD_MBR UGRD_ME ///
@@ -1175,56 +1260,85 @@ capture {
     foreach ent in PRONIED PEIP UE118 ANIN FONCODES {
         foreach f of local M_`ent' {
             capture use "${Output}/`f'.dta", clear
-            if _rc continue
-            * Forzar strings en codigo_* y cui para que el append no pelee
-            foreach c in cui codigo_local codigo_modular codigos_modulares {
-                capture confirm string variable `c'
-                if _rc {
-                    capture confirm variable `c'
-                    if !_rc tostring `c', replace force
-                }
+            if _rc {
+                di as txt "  (saltando `f' - no existe)"
+                continue
             }
+            prep_panorama
             gen entidad = "`ent'"
             gen unidad  = "`f'"
-            append using `panorama', force
+            append using `panorama'
             save `panorama', replace
+            di as txt "  + `f': " _N " acumulados"
         }
     }
 
     use `panorama', clear
 
     * --- Merge con MEF Banco de Inversiones para enriquecer -----------------
-    * Vars a traer desde MEF: geografia, unidad ejecutora, UF/OPMI/UEI,
-    * pliego, sector, monto_inversion (costo total BI), devengado, PIM, PIA,
-    * avances, fechas ET, situacion, estado BI, cartera PMI.
     capture confirm file "${Output}/MEF_Base_Inversiones.dta"
     if !_rc {
-        merge m:1 cui using "${Output}/MEF_Base_Inversiones.dta", ///
+        * Solo enriquecemos las filas que tienen cui. El MEF debe tener cui
+        * como string de 7 digitos (post_clean lo deja asi).
+        preserve
+        use "${Output}/MEF_Base_Inversiones.dta", clear
+        * Variables que vamos a traer
+        keep cui departamento provincia distrito sector pliego ///
+             unidad_ejecutora uf uei opmi ///
+             costo_actualizado_bi devengado pim pia ///
+             avance_fisico_bi avance_financiero_bi ///
+             fecha_inicio_et fecha_fin_et ///
+             situacion estado_bi cartera_pmi funcion nombre_inversion
+        * Quita duplicados de cui (deberia ser unico)
+        duplicates drop cui, force
+        tempfile mef_bi
+        save `mef_bi'
+        restore
+
+        * Renombrar del master para poder hacer update replace sin que pise
+        * las variables del using (ej. departamento local vs BI)
+        foreach v in departamento provincia distrito nombre_inversion {
+            capture rename `v' `v'_base
+        }
+
+        merge m:1 cui using `mef_bi', ///
             keep(master match) ///
-            keepusing(departamento provincia distrito ///
-                     sector pliego unidad_ejecutora uf uei opmi ///
+            keepusing(departamento provincia distrito sector pliego ///
+                     unidad_ejecutora uf uei opmi ///
                      costo_actualizado_bi devengado pim pia ///
                      avance_fisico_bi avance_financiero_bi ///
                      fecha_inicio_et fecha_fin_et ///
-                     situacion estado_bi cartera_pmi funcion ///
-                     nombre_inversion) ///
-            update replace ///
+                     situacion estado_bi cartera_pmi funcion nombre_inversion) ///
             generate(_m_bi)
-        * _m_bi==1: sin match en BI (no se enriquecio)
-        * _m_bi==3: match (datos enriquecidos)
+
         label define m_bi 1 "solo_panorama" 3 "match_BI"
         label values _m_bi m_bi
+
+        * Consolidar geografia: si la del panorama esta vacia, usar la del BI
+        foreach v in departamento provincia distrito nombre_inversion {
+            capture replace `v' = `v'_base if `v' == "" & `v'_base != ""
+            capture drop `v'_base
+        }
     }
 
-    order entidad unidad
+    * Orden canonico
     to_lower_ascii
+    order entidad unidad cui codigo_local codigo_modular ///
+          nombre_ie nombre_inversion departamento provincia distrito ///
+          estado situacion tipo_inversion tipo_intervencion tipo_mantenimiento ///
+          monto_inversion devengado pim pia costo_actualizado_bi ///
+          avance_fisico avance_financiero ///
+          fecha_inicio fecha_culminacion fecha_entrega ///
+          fecha_inicio_et fecha_fin_et ///
+          unidad_ejecutora uf opmi sector pliego funcion
+
     save "${Output}/BASE_PANORAMA.dta", replace
     di as res _newline(1) "BASE_PANORAMA: " _N " obs, " c(k) " vars"
 
     * Export a CSV para Power BI / Excel
     export delimited using "${Output}/BASE_PANORAMA.csv", ///
         delimiter(",") quote replace
-    di as res "BASE_PANORAMA.csv exportado para Power BI"
+    di as res "BASE_PANORAMA.csv exportado"
 }
 
 

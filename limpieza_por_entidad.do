@@ -1552,9 +1552,29 @@ di as res "BASE_PANORAMA.csv exportado"
 capture use "${Output}/BASE_PANORAMA.dta", clear
 if !_rc {
     di _newline(1) as txt "===== CONTEO POR ENTIDAD/UNIDAD ====="
-    tab entidad unidad, missing
+    tab entidad tipo_intervencion_gral, missing
+}
+
+
+*============================================================================
+* Generar visor HTML (llama a Python si esta disponible)
+*============================================================================
+di _newline(1) as txt "Generando visor HTML..."
+capture shell python3 "${Input}/generar_visor.py" "${Output}/BASE_PANORAMA.csv"
+if _rc {
+    capture shell python "${Input}/generar_visor.py" "${Output}/BASE_PANORAMA.csv"
+}
+capture confirm file "${Output}/visor_intervenciones.html"
+if !_rc {
+    di as res "visor_intervenciones.html generado en ${Output}"
+    di as txt "Abrir en navegador para ver el dashboard."
+}
+else {
+    di as txt "(Python no disponible o generar_visor.py no encontrado)"
+    di as txt "Para generar el visor manualmente:"
+    di as txt "  python3 generar_visor.py " `"""' "${Output}/BASE_PANORAMA.csv" `"""'
 }
 
 di _newline(2) as res "===== LISTO ====="
 di as txt "Bases .dta en: ${Output}"
-di as txt "BASE_PANORAMA.dta + BASE_PANORAMA.csv listos para el visor (Power BI)."
+di as txt "BASE_PANORAMA.dta + BASE_PANORAMA.csv + visor_intervenciones.html"

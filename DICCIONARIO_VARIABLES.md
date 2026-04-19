@@ -1,135 +1,173 @@
-# Diccionario comun de variables (post-limpieza)
+# Diccionario de variables — BASE_PANORAMA.dta
 
-Todas las bases generadas por `clean_excel_to_dta.do` usan estos nombres canonicos
-cuando la variable existe. Cualquier sinonimo que aparezca en el Excel original se
-renombra automaticamente al nombre canonico por la subrutina `apply_dictionary`.
+Generado por `limpieza_por_entidad.do`. BASE_PANORAMA consolida todas las
+entidades (PRONIED, PEIP, UE118, ANIN, FONCODES) en una sola .dta, enriquecida
+con datos del MEF Banco de Inversiones, Vinculaciones y Locales Educativos.
+
+## Etiquetas de origen
+
+| Variable | Descripcion |
+|---|---|
+| `entidad` | PRONIED, PEIP, UE118, ANIN, FONCODES |
+| `unidad` | Hoja/reporte de origen (UGEO, UGRD_MBR, PEIP_IMPLEMENTADOS, etc.) |
+| `tipo_intervencion_gral` | Clasificacion general: PROYECTO, MANTENIMIENTO, ACONDICIONAMIENTO, ACCESIBILIDAD, MODULOS, MOBILIARIO/EQUIPAMIENTO, ASISTENCIA TECNICA, INSPECCION, ASESORAMIENTO |
 
 ## Llaves
 
-| Variable canonica       | Tipo   | Formato / largo           | Sinonimos en Excel original |
-|------------------------|--------|---------------------------|-----------------------------|
-| `cui`                   | string | 7 digitos con ceros delante | CUI, CUI / IDEA, Codigo Unico de Inversiones (CUI), Codigo Unico, Codigo de la Inversion |
-| `cui_snip`              | string | 7 digitos                 | Codigo SNIP |
-| `cui_idea`              | string | 7 digitos                 | Codigo IDEA |
-| `codigo_local`          | string | 6 digitos                 | Codigo Local, Cod. Local, Codigo del Local Educativo |
-| `codigo_modular`        | string | 7 digitos                 | Codigo Modular, Cod. Modular, Cod. Mod. |
-| `codigos_modulares`     | string | 7 digitos / 7 digitos ... | Codigos modulares intervenidos |
-| `codigo_institucion`    | string | 8 digitos                 | Codigo de la institucion |
+| Variable | Tipo | Largo | Fuente |
+|---|---|---|---|
+| `cui` | string | 7 digitos | Codigo Unico de Inversiones (MEF) |
+| `codigo_local` | string | 6 digitos | Codigo del local educativo (MINEDU) |
+| `codigo_modular` | string | 7 digitos | Codigo modular de la IE |
+| `codigos_modulares` | string | 7 dig / 7 dig ... | Multiples codigos modulares separados por "/" |
 
-**Reglas de limpieza de codigos** (helper `clean_code`):
+## Identificacion
 
-- Elimina espacios, corchetes `[]`, parentesis, llaves `{}`.
-- Unifica separadores `;` `,` `\` `|` → `/`.
-- Elimina sufijos tipo `-1`, `-A`, `-B2` (dash seguido de letra/numero).
-- Elimina prefijos tipo `A-`, `AB-`.
-- Descarta cualquier caracter no numerico (excepto `/`).
-- Pad con ceros a la izquierda hasta el largo esperado.
-- Ejemplos:
-    - `"[123456]"`              → `"123456"`
-    - `"123456-1"`               → `"123456"`
-    - `"A-123456"`               → `"123456"`
-    - `"123456 / 7890"`          → `"123456/0007890"` (si digits=6)
-    - `"123456;7890"`            → `"123456/0007890"`
+| Variable | Tipo | Fuente |
+|---|---|---|
+| `nombre_ie` | string | Nombre de la IE (de la base o de Vinculaciones) |
+| `nombre_inversion` | string | Nombre del proyecto/inversion (de la base o del MEF BI) |
+| `nombre_corto` | string | Nombre corto del PI |
+| `nombre_iiee_local` | string | Nombre concatenado de las IIEE del local (de Locales Educativos) |
+| `nivel_modalidad` | string | Nivel o modalidad de la IE (de Vinculaciones: Inicial, Primaria, Secundaria, etc.) |
 
-## Identificacion / descripcion
+## Geografia
 
-| Variable canonica   | Tipo   | Sinonimos |
-|--------------------|--------|-----------|
-| `nombre_ie`         | string | Nombre de la I.E., I.E. |
-| `nombre_inversion`  | string | Nombre de la inversion, Nombre del proyecto, Nombre largo PI, Nombre del PEIP |
-| `nombre_corto`      | string | Nombre corto, Nombre corto PI |
-| `tipo_inversion`    | string | Tipo de inversion (PI Regular, IOARR), Tipo de la Inversion |
-| `tipo_intervencion` | string | Tipo de intervencion (MBR o ME) |
-| `tipo_mantenimiento`| string | Tipo de mantenimiento |
-| `tipo_sistema_modular` | string | Tipo de sistema modular |
+| Variable | Tipo | Fuente |
+|---|---|---|
+| `departamento` | string | Region/departamento. Se enriquece: base -> MEF BI -> Locales Educativos |
+| `provincia` | string | Idem |
+| `distrito` | string | Idem |
+| `ubigeo` | string | Codigo de ubigeo (6 digitos, de Locales Educativos) |
+| `centro_poblado` | string | Centro poblado (de Locales Educativos) |
+| `dre` | string | Direccion Regional de Educacion |
+| `ugel` | string | Unidad de Gestion Educativa Local |
+| `area_censal` | string | Urbano / Rural (de Locales Educativos) |
+| `latitud` | numeric | Coordenada (de Locales Educativos) |
+| `longitud` | numeric | Coordenada (de Locales Educativos) |
 
-## Ubicacion
+## Estado y clasificacion
 
-| Variable canonica | Sinonimos |
-|-------------------|-----------|
-| `departamento`     | Departamento, Departamento CUI, Departamento Proxy |
-| `provincia`        | Provincia, Provincia CUI |
-| `distrito`         | Distrito |
+| Variable | Tipo | Fuente |
+|---|---|---|
+| `estado` | string | Estado de la intervencion (de la base) |
+| `estado_ie` | string | Estado de la IE: Activo/Inactivo (de Vinculaciones) |
+| `estado_bi` | string | Estado en el MEF Banco de Inversiones |
+| `situacion` | string | Situacion en BI (Viable, Aprobado, etc.) |
+| `fase_obra` | string | Fase de la obra (Preinversion, Ejecucion, Culminada) |
+| `etapa_obra` | string | Etapa dentro de la fase |
+| `tipo_inversion` | string | PI Regular / IOARR / OxI |
+| `tipo_intervencion` | string | MBR / ME / mantenimiento correctivo, etc. |
+| `tipo_mantenimiento` | string | Preventivo, Correctivo, etc. |
+| `tipo_sistema_modular` | string | Prefabricado, etc. |
+| `unidad_zonal` | string | Nombre de la unidad zonal PRONIED |
 
-## Estado / avance
+## Montos y ejecucion (numerico, formato %15.2fc)
 
-| Variable canonica    | Tipo    | Formato | Sinonimos |
-|---------------------|---------|---------|-----------|
-| `estado`             | string  | -       | Estado, Estado de la inversion, Estado de la intervencion, Estado proyecto |
-| `fase_obra`          | string  | -       | Fase de la obra, Fase del componente |
-| `etapa_obra`         | string  | -       | Etapa de la obra, Etapa del componente |
-| `etapa_intervencion` | string  | -       | Etapa de la intervencion (Idea, Formulacion, ...) |
-| `avance_fisico`      | numerico| %6.4f   | Avance fisico (%), % de avance fisico de obra, Avance |
-| `avance_financiero`  | numerico| %6.4f   | Avance financiero (%) |
-| `avance_diseno`      | numerico| %6.4f   | % de avance diseno |
+| Variable | Fuente |
+|---|---|
+| `monto_inversion` | Monto de inversion de la base original |
+| `monto_asignado_total` | Monto asignado total (UGM mantenimiento/accesibilidad) |
+| `monto_transferido` | Monto transferido (UGM / UGSC) |
+| `monto_total_fam` | Monto total FAM - Ficha de Acciones de Mantenimiento |
+| `monto_total_faa` | Monto total FAA - Ficha de Acciones de Accesibilidad |
+| `monto_total_dg` | Monto total Declaracion de Gastos |
+| `devengado` | Devengado acumulado (de la base o del MEF BI) |
+| `pim` | Presupuesto Institucional Modificado (del MEF BI) |
+| `pia` | Presupuesto Institucional de Apertura (del MEF BI) |
+| `costo_actualizado_bi` | Costo actualizado en el Banco de Inversiones |
 
-## Montos
+## Avance (numerico, formato %6.4f)
 
-| Variable canonica | Tipo    | Formato   | Sinonimos |
-|-------------------|---------|-----------|-----------|
-| `monto_inversion`  | numerico| %15.2fc  | Monto de inversion (S/), Monto total de inversion (S/), Monto de la inversion (Soles), Monto de la intervencion 2025/2026, Costo actualizado |
-| `devengado`        | numerico| %15.2fc  | Devengado acumulado |
+| Variable | Fuente |
+|---|---|
+| `avance_fisico` | Avance fisico (%) de la base |
+| `avance_financiero` | Avance financiero (%) de la base |
 
-## Fechas (formato Stata `%td`)
+## Conteos
 
-| Variable canonica    | Sinonimos |
-|---------------------|-----------|
-| `fecha_inicio`       | Fecha de inicio de la obra (o estimada), Fecha de inicio de obra, Fecha de inicio |
-| `fecha_culminacion`  | Fecha de culminacion de obra (o estimada), Culminados/Entregados Fecha |
-| `fecha_recepcion`    | Fecha de recepcion (o estimada), Fecha de recepcion de obra |
-| `fecha_entrega`      | Fecha de entrega (o estimada), Fecha de entrega de obra |
-| `fecha_inauguracion` | Fecha de inauguracion (o estimada) |
+| Variable | Fuente |
+|---|---|
+| `cantidad_modulos_pronied` | Cantidad de modulos PRONIED (PEIP Contingencia) |
+| `cantidad_modulos_peip` | Cantidad de modulos PEIP (PEIP Contingencia) |
+| `total_bienes` | Total de bienes (UGME) |
+| `capacidad_operativa` | Capacidad operativa en estudiantes |
+| `matricula` | Matricula de la IE (de Locales Educativos) |
 
-Las fechas se parsean probando en orden: `YMD hms`, `YMD`, `DMY`, `MDY`.
-Solo se convierte la variable si >=80% de los valores no vacios parsean.
+## Fechas (formato %td)
 
-## Comentarios
+| Variable | Fuente |
+|---|---|
+| `fecha_inicio` | Fecha de inicio de la obra |
+| `fecha_culminacion` | Fecha de culminacion |
+| `fecha_entrega` | Fecha de entrega |
+| `fecha_recepcion` | Fecha de recepcion |
+| `fecha_inauguracion` | Fecha de inauguracion |
+| `fecha_liquidacion` | Fecha de liquidacion |
+| `fecha_inicio_et` | Fecha de inicio del Expediente Tecnico (MEF BI) |
+| `fecha_fin_et` | Fecha de fin/modificacion del ET (MEF BI) |
+| `fecha_inspeccion` | Fecha de inspeccion (UZ) |
+| `fecha_evento` | Fecha del evento/asesoramiento (UZ) |
 
-| Variable canonica     | Sinonimos |
-|----------------------|-----------|
-| `comentario_general`  | Comentarios, Comentario, Comentarios (- Otras variables que quiera reportar...), "DETALLE + COMENTARIO" concatenados con ` \| ` |
+## Institucional (del MEF Banco de Inversiones)
 
-## Variables especiales por entidad
+| Variable | Fuente |
+|---|---|
+| `unidad_ejecutora` | Unidad Ejecutora del Pliego (UEP) |
+| `uf` | Unidad Formuladora |
+| `uei` | Unidad Ejecutora de Inversiones |
+| `opmi` | Oficina de Programacion Multianual de Inversiones |
+| `sector` | Sector (Educacion, etc.) |
+| `pliego` | Pliego presupuestal |
+| `funcion` | Funcion presupuestal (Educacion, etc.) |
+| `cartera_pmi` | En cartera PMI (Si/No) |
 
-Algunas bases tienen variables propias que no aparecen en otras:
+## Servicios basicos (de Locales Educativos)
 
-- PEIP_CONTINGENCIA: `cantidad_de_modulos_pronied`, `cantidad_de_modulos_peip`, `ano_de_instalacion_de_los_modulo`.
-- MEF_Base_Inversiones (Banco de Inversiones MEF): muchas columnas propias (PIM, PIA, devengado mensual, etc.) — se mantienen con su nombre normalizado.
-- CUI_cartera_GN: solo `cui` + `cartera_gn`.
+| Variable | Valores |
+|---|---|
+| `agua_acceso` | SI / NO |
+| `saneamiento_acceso` | SI / NO |
+| `energia_acceso` | SI / NO |
+| `internet_acceso` | SI / NO |
 
-## Convenciones
+## Variables de control del merge
 
-- Strings: `strtrim(stritrim(.))` + reemplazo de tokens `-`, `---`, `N/A`, `s/d`, etc. por vacio.
-- Strings a numerico: si `>=80%` de valores no vacios parsean con `real()`, se convierten.
-- Strings a fecha: prueba YMD, DMY, MDY; convierte si `>=80%` parsea.
-- Duplicados exactos: `duplicates drop` en cada base.
-- Orden canonico: las variables clave (cui, codigo_local, nombre, estado, montos, fechas, comentario) se ponen adelante con `order`.
+| Variable | Valores |
+|---|---|
+| `_m_bi` | 1 = sin match en MEF BI, 3 = enriquecido con BI |
+| `_m_vinc` | 1 = sin match en Vinculaciones, 3 = enriquecido |
+| `_m_le` | 1 = sin match en Locales Educativos, 3 = enriquecido |
 
-## Bases generadas
+## Fuentes de datos
 
-Por hoja (una por unidad/reporte):
+| Archivo | Hojas | Nivel |
+|---|---|---|
+| UGEO.xlsx | UGEO | CUI + codigo_local |
+| UGRD.xlsx | PIRCC, MBR, ME | CUI + codigo_local |
+| UGSC.xlsx | ASITEC-SIAT, SEGUIMIENTO PI | CUI |
+| UGME.xlsx | SISTEMAS MODULARES, MOBILIARIO, CONSERVACION | codigo_local + codigo_modular |
+| UGM.xlsx | ACONDICIONAMIENTO, MANT 2025/2026, ACCESIBILIDAD 2017-2026 | codigo_local |
+| Zonales_UZ.xlsx | INSPECCIONES, ASESORAMIENTO | codigo_local |
+| PEIP.xlsx | IMPLEMENTADOS, CONTINGENCIA, MANTENIMIENTO | CUI + codigo_local |
+| UE118.xlsx | PMESUT, PMESTP | CUI |
+| ANIN.xlsx | IRI, MANTENIMIENTO | CUI + codigo_local |
+| FONCODES.xlsx | LE_INTERVENIDOS, MANT 2025/2026 | CUI o codigo_modular |
+| Vinculaciones_compartido.xlsx | Vinculaciones | CUI -> codigo_local/modular |
+| Locales educativos - Servicios basicos.xlsx | BaseLE | codigo_local |
+| 2026.04.13 Base de Inversiones.xlsx | Data | CUI |
+| CUI_cartera_GN.xlsx | Hoja1 | CUI |
 
-- `PRONIED_UGEO.dta`, `PRONIED_UGRD_PIRCC.dta`, `PRONIED_UGRD_MBR.dta`, `PRONIED_UGRD_ME.dta`
-- `PEIP_IMPLEMENTADOS.dta`, `PEIP_CONTINGENCIA.dta`, `PEIP_MANTENIMIENTO.dta`
-- `UE118_PMESUT.dta`, `UE118_PMESTP.dta`
-- `ANIN.dta`
-- `FONCODES_LE_INTERVENIDOS.dta`, `FONCODES_MANT_2025.dta`, `FONCODES_MANT_2026.dta`
-- `MEF_Base_Inversiones.dta`, `CUI_cartera_GN.dta`
+## Tipo de intervencion general (clasificacion)
 
-Consolidadas por entidad (append con variable de origen):
-
-- `PRONIED.dta` (con variable `unidad`: UGEO / UGRD_PIRCC / UGRD_MBR / UGRD_ME)
-- `PEIP.dta` (con variable `tipo_reporte`: IMPLEMENTADOS / CONTINGENCIA / MANTENIMIENTO)
-- `UE118.dta` (con variable `programa`: PMESUT / PMESTP)
-- `FONCODES.dta` (con variable `tipo_reporte`)
-
-## Pendientes
-
-Faltan bases de PRONIED:
-
-- UGSC (Unidad Gerencial de Sistemas de Contratacion)
-- UGME (Unidad Gerencial de Mantenimiento)
-- UGM (Unidad Gerencial de Mantenimiento / variantes)
-- Uzonal (Unidades zonales)
-
-Cuando lleguen los Excel correspondientes, agregar una linea `clean_one, file(...) sheet(...) row(...) prefix(...)` en el .do.
+| Valor | Unidades incluidas |
+|---|---|
+| PROYECTO | UGEO, UGRD_MBR, UGRD_ME, UGRD_PIRCC, UGSC_SEGUIMIENTO, ANIN_IRI, PEIP_IMPLEMENTADOS, UE118_PMESUT, UE118_PMESTP, FONCODES_LE_INTERVENIDOS |
+| MANTENIMIENTO | UGM_MANTENIMIENTO_2025/2026, PEIP_MANTENIMIENTO, ANIN_MANTENIMIENTO, FONCODES_MANT_2025/2026 |
+| ACONDICIONAMIENTO | UGM_ACONDICIONAMIENTO |
+| ACCESIBILIDAD | UGM_ACCESIBILIDAD_2017 a 2026 |
+| MODULOS | UGME_SISTEMAS_MODULARES, UGME_PLAN_CONSERVACION, PEIP_CONTINGENCIA |
+| MOBILIARIO/EQUIPAMIENTO | UGME_MOBILIARIO |
+| ASISTENCIA TECNICA | UGSC_ASITEC |
+| INSPECCION | UZ_INSPECCIONES |
+| ASESORAMIENTO | UZ_ASESORAMIENTO |

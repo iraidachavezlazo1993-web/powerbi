@@ -1074,6 +1074,94 @@ capture {
 }
 
 
+* ---------- VINCULACIONES (puente CUI <-> codigo local/modular/IIEE) --------
+* 218K filas. Vincula cada CUI con sus codigos modulares, local, nivel/modalidad.
+capture confirm file "${Output}/VINCULACIONES.dta"
+if _rc {
+    di as txt "Importando Vinculaciones desde Excel (primera vez, ~218K filas)..."
+    import excel "${Input}/Vinculaciones_compartido.xlsx", ///
+        sheet("Vinculaciones") firstrow allstring clear
+
+    capture rename CUI                        cui
+    capture rename CódigoModular              codigo_modular
+    capture rename CódigoLocal                codigo_local
+    capture rename NombredelainversiOn        nombre_inversion
+    capture rename Estadodelainversion        estado_inversion_vinc
+    capture rename Estadovincualcion          estado_vinculacion
+    capture rename FechaVinculación           fecha_vinculacion
+    capture rename Anexo                      anexo
+    capture rename NombreIIEE                 nombre_ie
+    capture rename Nivelomodalidad            nivel_modalidad
+    capture rename EstadodelaIE               estado_ie
+
+    to_lower_ascii
+    post_clean
+
+    clean_code cui, digits(7)
+    clean_code codigo_local, digits(6)
+    clean_code codigo_modular, digits(7)
+
+    duplicates drop
+    save "${Output}/VINCULACIONES.dta", replace
+    di as res "VINCULACIONES: " _N " obs"
+}
+else {
+    di as res "VINCULACIONES: cargado de .dta existente"
+}
+
+
+* ---------- LOCALES EDUCATIVOS - Servicios basicos --------------------------
+* 55K filas a nivel de local con geografia + servicios (agua, saneamiento, etc.)
+capture confirm file "${Output}/LOCALES_EDUCATIVOS.dta"
+if _rc {
+    capture {
+        di as txt "Importando Locales Educativos desde Excel (primera vez, ~55K filas)..."
+        import excel "${Input}/Locales educativos - Servicios básicos (dic2025).xlsx", ///
+            sheet("BaseLE") firstrow allstring clear
+
+        capture rename CódigoLocal                            codigo_local
+        capture rename Región                                 departamento
+        capture rename Provincia                              provincia
+        capture rename Distrito                               distrito
+        capture rename CentroPoblado                          centro_poblado
+        capture rename Latitud                                latitud
+        capture rename Longitud                               longitud
+        capture rename Ubigeo                                 ubigeo
+        capture rename DRE                                    dre
+        capture rename UGEL                                   ugel
+        capture rename NombredelasInstitucionesEducativasdelLo nombre_iiee_local
+        capture rename ÁreaCensal                             area_censal
+        capture rename Matrícula                              matricula
+        * Agua
+        capture rename ProcedenciadeabastecimientoAgua        agua_procedencia
+        capture rename AccesoAgua                             agua_acceso
+        capture rename CondicióndelservicioPNIEAgua           agua_condicion
+        * Alcantarillado
+        capture rename TipodeconexiónAlcantarilladoSanitario  saneamiento_tipo
+        capture rename AccesoAlcantarilladoSanitario          saneamiento_acceso
+        capture rename CondicióndelservicioPNIEAlcantarillado saneamiento_condicion
+        * Energia
+        capture rename ProcedenciadeabastecimientoEnergíaeléc energia_procedencia
+        capture rename AccesoEnergíaeléctrica                 energia_acceso
+        capture rename CondicióndelservicioPNIEEnergíaeléctri energia_condicion
+        * Internet
+        capture rename AccesoInternet                         internet_acceso
+
+        to_lower_ascii
+        clean_code codigo_local, digits(6)
+
+        destring matricula latitud longitud, replace force
+
+        duplicates drop codigo_local, force
+        save "${Output}/LOCALES_EDUCATIVOS.dta", replace
+        di as res "LOCALES_EDUCATIVOS: " _N " obs"
+    }
+}
+else {
+    di as res "LOCALES_EDUCATIVOS: cargado de .dta existente"
+}
+
+
 *============================================================================
 * PASO 2 - Consolidar por entidad (append con tag de origen)
 *============================================================================
@@ -1329,16 +1417,125 @@ if !_rc {
     }
 }
 
+* --- Tipo de intervencion general -------------------------------------------
+gen tipo_intervencion_gral = ""
+replace tipo_intervencion_gral = "PROYECTO"             if inlist(unidad, ///
+    "UGEO","UGRD_MBR","UGRD_ME","UGRD_PIRCC","UGSC_SEGUIMIENTO", ///
+    "ANIN_IRI","PEIP_IMPLEMENTADOS","UE118_PMESUT","UE118_PMESTP", ///
+    "FONCODES_LE_INTERVENIDOS")
+replace tipo_intervencion_gral = "MANTENIMIENTO"        if inlist(unidad, ///
+    "UGM_MANTENIMIENTO_2025","UGM_MANTENIMIENTO_2026", ///
+    "PEIP_MANTENIMIENTO","ANIN_MANTENIMIENTO") ///
+    | inlist(unidad, "FONCODES_MANT_2025","FONCODES_MANT_2026")
+replace tipo_intervencion_gral = "ACONDICIONAMIENTO"    if unidad == "UGM_ACONDICIONAMIENTO"
+replace tipo_intervencion_gral = "ACCESIBILIDAD"        if strpos(unidad, "ACCESIBILIDAD") > 0
+replace tipo_intervencion_gral = "MODULOS"              if inlist(unidad, ///
+    "UGME_SISTEMAS_MODULARES","UGME_PLAN_CONSERVACION","PEIP_CONTINGENCIA")
+replace tipo_intervencion_gral = "MOBILIARIO/EQUIPAMIENTO" if unidad == "UGME_MOBILIARIO"
+replace tipo_intervencion_gral = "ASISTENCIA TECNICA"   if unidad == "UGSC_ASITEC"
+replace tipo_intervencion_gral = "INSPECCION"           if unidad == "UZ_INSPECCIONES"
+replace tipo_intervencion_gral = "ASESORAMIENTO"        if unidad == "UZ_ASESORAMIENTO"
+replace tipo_intervencion_gral = "OTRO"                 if tipo_intervencion_gral == ""
+tab tipo_intervencion_gral
+
+* --- Merge con VINCULACIONES (CUI -> codigo_local, nombre_ie, nivel) --------
+* Vinculaciones es m:1 a nivel CUI (un CUI puede tener multiples modular/local).
+* Traemos el primer local + nombre + nivel para enriquecer.
+capture confirm file "${Output}/VINCULACIONES.dta"
+if !_rc {
+    preserve
+    use "${Output}/VINCULACIONES.dta", clear
+    keep cui codigo_local codigo_modular nombre_ie nivel_modalidad estado_ie
+    * Quedarnos con un registro por CUI (el primero)
+    bysort cui: keep if _n == 1
+    tempfile vinc
+    save `vinc'
+    restore
+
+    foreach v in nombre_ie nivel_modalidad estado_ie {
+        capture rename `v' `v'_base
+    }
+    * Solo enriquecer codigo_local si esta vacio
+    capture rename codigo_local codigo_local_base
+
+    merge m:1 cui using `vinc', keep(master match) generate(_m_vinc)
+
+    * Consolidar: priorizar lo que ya teniamos
+    capture {
+        replace codigo_local = codigo_local_base if codigo_local_base != "" & codigo_local_base != "."
+        drop codigo_local_base
+    }
+    foreach v in nombre_ie nivel_modalidad estado_ie {
+        capture confirm variable `v'_base
+        if _rc continue
+        capture confirm variable `v'
+        if _rc {
+            rename `v'_base `v'
+            continue
+        }
+        replace `v' = `v'_base if (`v' == "" | missing(`v')) & `v'_base != ""
+        drop `v'_base
+    }
+
+    di as res "  Vinculaciones merge: " _N " obs"
+    tab _m_vinc
+}
+
+* --- Merge con LOCALES EDUCATIVOS (codigo_local -> geografia + servicios) ---
+capture confirm file "${Output}/LOCALES_EDUCATIVOS.dta"
+if !_rc {
+    preserve
+    use "${Output}/LOCALES_EDUCATIVOS.dta", clear
+    keep codigo_local departamento provincia distrito ubigeo ///
+         centro_poblado dre ugel area_censal matricula ///
+         latitud longitud nombre_iiee_local ///
+         agua_acceso saneamiento_acceso energia_acceso internet_acceso
+    duplicates drop codigo_local, force
+    tempfile le
+    save `le'
+    restore
+
+    * Renombrar para no pisar lo que ya tenemos
+    foreach v in departamento provincia distrito ubigeo {
+        capture rename `v' `v'_prev
+    }
+
+    merge m:1 codigo_local using `le', keep(master match) generate(_m_le)
+
+    * Consolidar geografia: priorizar BI, luego Locales Educativos, luego base
+    foreach v in departamento provincia distrito ubigeo {
+        capture confirm variable `v'_prev
+        if _rc continue
+        capture confirm variable `v'
+        if _rc {
+            rename `v'_prev `v'
+            continue
+        }
+        replace `v' = `v'_prev if (`v' == "" | missing(`v')) & `v'_prev != ""
+        drop `v'_prev
+    }
+
+    di as res "  Locales Educativos merge: " _N " obs"
+    tab _m_le
+}
+
 * Orden canonico
 to_lower_ascii
-capture order entidad unidad cui codigo_local codigo_modular ///
-      nombre_ie nombre_inversion departamento provincia distrito ///
-      estado situacion tipo_inversion tipo_intervencion tipo_mantenimiento ///
+capture order entidad unidad tipo_intervencion_gral ///
+      cui codigo_local codigo_modular ///
+      nombre_ie nombre_inversion nombre_iiee_local nivel_modalidad ///
+      departamento provincia distrito ubigeo centro_poblado dre ugel ///
+      area_censal matricula latitud longitud ///
+      estado estado_ie situacion ///
+      fase_obra etapa_obra ///
+      tipo_inversion tipo_intervencion tipo_mantenimiento ///
       monto_inversion devengado pim pia costo_actualizado_bi ///
       avance_fisico avance_financiero ///
       fecha_inicio fecha_culminacion fecha_entrega ///
       fecha_inicio_et fecha_fin_et ///
-      unidad_ejecutora uf opmi sector pliego funcion
+      unidad_ejecutora uf opmi sector pliego funcion ///
+      agua_acceso saneamiento_acceso energia_acceso internet_acceso ///
+      comentario_general
 
 save "${Output}/BASE_PANORAMA.dta", replace
 di as res _newline(1) "BASE_PANORAMA: " _N " obs, " c(k) " vars"

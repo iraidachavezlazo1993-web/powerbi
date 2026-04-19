@@ -36,16 +36,22 @@ TIPOS = ["PROYECTO","MANTENIMIENTO","ACONDICIONAMIENTO","ACCESIBILIDAD",
          "MODULOS","MOBILIARIO/EQUIPAMIENTO","ASISTENCIA TECNICA",
          "INSPECCION","ASESORAMIENTO"]
 
-SERVICIOS = ["agua_acceso","saneamiento_acceso","energia_acceso","internet_acceso"]
-SVC_LABELS = {"agua_acceso":"Agua","saneamiento_acceso":"Saneamiento",
-              "energia_acceso":"Energia","internet_acceso":"Internet"}
-
 
 def stats(df):
     n = len(df)
-    n_cui = df["cui"].replace("",np.nan).nunique() if "cui" in df.columns else 0
-    monto = df["monto_inversion"].sum() if "monto_inversion" in df.columns else 0
-    dev = df["devengado"].sum() if "devengado" in df.columns else 0
+    cuis = df.loc[df["cui"].replace("",np.nan).notna(), "cui"] if "cui" in df.columns else pd.Series()
+    n_cui = cuis.nunique()
+    # Monto y devengado: desduplicar por CUI para no contabilizar doble
+    if "cui" in df.columns and "monto_inversion" in df.columns:
+        df_cui = df[df["cui"] != ""].drop_duplicates(subset="cui", keep="first")
+        monto = df_cui["monto_inversion"].sum()
+    else:
+        monto = 0
+    if "cui" in df.columns and "devengado" in df.columns:
+        df_cui = df[df["cui"] != ""].drop_duplicates(subset="cui", keep="first")
+        dev = df_cui["devengado"].sum()
+    else:
+        dev = 0
     avf = df["avance_fisico"].mean() if "avance_fisico" in df.columns else np.nan
     return n, n_cui, monto, dev, avf
 
@@ -55,12 +61,10 @@ def tipologia_matrix(df, group_col):
     for name, g in df.groupby(group_col):
         if not name:
             continue
-        row = {"nombre": name, "total": len(g)}
+        n_cui = g.loc[g["cui"].replace("",np.nan).notna(), "cui"].nunique() if "cui" in g.columns else 0
+        row = {"nombre": name, "total": len(g), "n_cui": n_cui}
         for t in TIPOS:
             row[t] = int((g["tipo_intervencion_gral"] == t).sum())
-        for s in SERVICIOS:
-            if s in g.columns:
-                row[SVC_LABELS[s]] = int((g[s].str.upper() == "SÍ").sum() + (g[s].str.upper() == "SI").sum())
         rows.append(row)
     rows.sort(key=lambda x: -x["total"])
     return rows
@@ -80,21 +84,11 @@ def parrafo(nombre, df):
     if a: parts.append(a)
     econ = ", con ".join(parts)
 
-    svc_parts = []
-    for s in SERVICIOS:
-        if s in df.columns:
-            total_le = (df[s] != "").sum()
-            si = ((df[s].str.upper() == "SÍ") | (df[s].str.upper() == "SI")).sum()
-            if total_le > 0:
-                svc_parts.append(f"{SVC_LABELS[s]}: {si}/{total_le} ({si*100/total_le:.0f}%)")
-    svc_txt = ". Acceso a servicios basicos: " + ", ".join(svc_parts) if svc_parts else ""
-
     return (f"En <b>{nombre}</b> se identifican <b>{n:,}</b> registros de intervencion "
-            f"asociados a <b>{n_cui:,}</b> CUI unicos. "
+            f"asociados a <b>{n_cui:,}</b> CUI unicos (monto sin duplicar por CUI). "
             f"Por tipo de intervencion: {tipos_txt}. "
             f"Por entidad: {ent_txt}. "
-            f"El monto total de inversion asciende a <b>{econ}</b>"
-            f"{svc_txt}.")
+            f"El monto total de inversion asciende a <b>{econ}</b>.")
 
 
 def build_html(df):
@@ -144,18 +138,14 @@ def build_html(df):
         tip_rows_html += "<tr>"
         tip_rows_html += f"<td class='dept-link' onclick=\"selectDepto('{r['nombre']}')\">{r['nombre']}</td>"
         tip_rows_html += f"<td class='num'>{r['total']:,}</td>"
+        tip_rows_html += f"<td class='num'>{r.get('n_cui',0):,}</td>"
         for t in TIPOS:
             v = r.get(t, 0)
-            cls = "num has" if v > 0 else "num zero"
-            tip_rows_html += f"<td class='{cls}'>{v}</td>"
-        for s in ["Agua","Saneamiento","Energia","Internet"]:
-            v = r.get(s, 0)
             cls = "num has" if v > 0 else "num zero"
             tip_rows_html += f"<td class='{cls}'>{v}</td>"
         tip_rows_html += "</tr>\n"
 
     tip_header = "".join(f"<th>{t[:12]}</th>" for t in TIPOS)
-    svc_header = "<th>Agua</th><th>Sanea.</th><th>Energ.</th><th>Internet</th>"
 
     n_total, n_cui, monto_t, dev_t, avf_t = stats(df)
 
@@ -228,7 +218,7 @@ tr:hover {{ background: #e8eaf6; }}
   <p style="font-size:0.78em;color:#666;margin-bottom:8px;">Click en el departamento para ver detalle por provincia/distrito/local.</p>
   <div class="scroll-table">
   <table>
-    <thead><tr><th>Departamento</th><th>Total</th>{tip_header}{svc_header}</tr></thead>
+    <thead><tr><th>Departamento</th><th>Total</th><th>CUI unicos</th>{tip_header}</tr></thead>
     <tbody>{tip_rows_html}</tbody>
   </table>
   </div>

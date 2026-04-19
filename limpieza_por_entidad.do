@@ -1237,109 +1237,116 @@ program define prep_panorama
 end
 
 
-capture {
-    clear
-    tempfile panorama
-    save `panorama', emptyok replace
+clear
+tempfile panorama
+save `panorama', emptyok replace
 
-    * Mapa entidad -> lista de archivos
-    local M_PRONIED   UGEO UGRD_PIRCC UGRD_MBR UGRD_ME ///
-                      UGSC_ASITEC UGSC_SEGUIMIENTO ///
-                      UGME_SISTEMAS_MODULARES UGME_MOBILIARIO UGME_PLAN_CONSERVACION ///
-                      UGM_ACONDICIONAMIENTO UGM_MANTENIMIENTO_2025 UGM_MANTENIMIENTO_2026 ///
-                      UGM_ACCESIBILIDAD_2017 UGM_ACCESIBILIDAD_2018 UGM_ACCESIBILIDAD_2019 ///
-                      UGM_ACCESIBILIDAD_2020 UGM_ACCESIBILIDAD_2021 UGM_ACCESIBILIDAD_2022 ///
-                      UGM_ACCESIBILIDAD_2023 UGM_ACCESIBILIDAD_2024 UGM_ACCESIBILIDAD_2025 ///
-                      UGM_ACCESIBILIDAD_2026 ///
-                      UZ_INSPECCIONES UZ_ASESORAMIENTO
-    local M_PEIP      PEIP_IMPLEMENTADOS PEIP_CONTINGENCIA PEIP_MANTENIMIENTO
-    local M_UE118     UE118_PMESUT UE118_PMESTP
-    local M_ANIN      ANIN_IRI ANIN_MANTENIMIENTO
-    local M_FONCODES  FONCODES_LE_INTERVENIDOS FONCODES_MANT_2025 FONCODES_MANT_2026
+* Mapa entidad -> lista de archivos
+local M_PRONIED   UGEO UGRD_PIRCC UGRD_MBR UGRD_ME ///
+                  UGSC_ASITEC UGSC_SEGUIMIENTO ///
+                  UGME_SISTEMAS_MODULARES UGME_MOBILIARIO UGME_PLAN_CONSERVACION ///
+                  UGM_ACONDICIONAMIENTO UGM_MANTENIMIENTO_2025 UGM_MANTENIMIENTO_2026 ///
+                  UGM_ACCESIBILIDAD_2017 UGM_ACCESIBILIDAD_2018 UGM_ACCESIBILIDAD_2019 ///
+                  UGM_ACCESIBILIDAD_2020 UGM_ACCESIBILIDAD_2021 UGM_ACCESIBILIDAD_2022 ///
+                  UGM_ACCESIBILIDAD_2023 UGM_ACCESIBILIDAD_2024 UGM_ACCESIBILIDAD_2025 ///
+                  UGM_ACCESIBILIDAD_2026 ///
+                  UZ_INSPECCIONES UZ_ASESORAMIENTO
+local M_PEIP      PEIP_IMPLEMENTADOS PEIP_CONTINGENCIA PEIP_MANTENIMIENTO
+local M_UE118     UE118_PMESUT UE118_PMESTP
+local M_ANIN      ANIN_IRI ANIN_MANTENIMIENTO
+local M_FONCODES  FONCODES_LE_INTERVENIDOS FONCODES_MANT_2025 FONCODES_MANT_2026
 
-    foreach ent in PRONIED PEIP UE118 ANIN FONCODES {
-        foreach f of local M_`ent' {
-            capture use "${Output}/`f'.dta", clear
-            if _rc {
-                di as txt "  (saltando `f' - no existe)"
-                continue
-            }
-            prep_panorama
-            gen entidad = "`ent'"
-            gen unidad  = "`f'"
-            append using `panorama'
-            save `panorama', replace
-            di as txt "  + `f': " _N " acumulados"
+foreach ent in PRONIED PEIP UE118 ANIN FONCODES {
+    foreach f of local M_`ent' {
+        capture use "${Output}/`f'.dta", clear
+        if _rc {
+            di as txt "  (saltando `f' - no existe)"
+            continue
         }
+        prep_panorama
+        gen entidad = "`ent'"
+        gen unidad  = "`f'"
+        append using `panorama'
+        save `panorama', replace
+        di as txt "  + `f': " _N " acumulados"
     }
-
-    use `panorama', clear
-
-    * --- Merge con MEF Banco de Inversiones para enriquecer -----------------
-    capture confirm file "${Output}/MEF_Base_Inversiones.dta"
-    if !_rc {
-        * Solo enriquecemos las filas que tienen cui. El MEF debe tener cui
-        * como string de 7 digitos (post_clean lo deja asi).
-        preserve
-        use "${Output}/MEF_Base_Inversiones.dta", clear
-        * Variables que vamos a traer
-        keep cui departamento provincia distrito sector pliego ///
-             unidad_ejecutora uf uei opmi ///
-             costo_actualizado_bi devengado pim pia ///
-             avance_fisico_bi avance_financiero_bi ///
-             fecha_inicio_et fecha_fin_et ///
-             situacion estado_bi cartera_pmi funcion nombre_inversion
-        * Quita duplicados de cui (deberia ser unico)
-        duplicates drop cui, force
-        tempfile mef_bi
-        save `mef_bi'
-        restore
-
-        * Renombrar del master para poder hacer update replace sin que pise
-        * las variables del using (ej. departamento local vs BI)
-        foreach v in departamento provincia distrito nombre_inversion {
-            capture rename `v' `v'_base
-        }
-
-        merge m:1 cui using `mef_bi', ///
-            keep(master match) ///
-            keepusing(departamento provincia distrito sector pliego ///
-                     unidad_ejecutora uf uei opmi ///
-                     costo_actualizado_bi devengado pim pia ///
-                     avance_fisico_bi avance_financiero_bi ///
-                     fecha_inicio_et fecha_fin_et ///
-                     situacion estado_bi cartera_pmi funcion nombre_inversion) ///
-            generate(_m_bi)
-
-        label define m_bi 1 "solo_panorama" 3 "match_BI"
-        label values _m_bi m_bi
-
-        * Consolidar geografia: si la del panorama esta vacia, usar la del BI
-        foreach v in departamento provincia distrito nombre_inversion {
-            capture replace `v' = `v'_base if `v' == "" & `v'_base != ""
-            capture drop `v'_base
-        }
-    }
-
-    * Orden canonico
-    to_lower_ascii
-    order entidad unidad cui codigo_local codigo_modular ///
-          nombre_ie nombre_inversion departamento provincia distrito ///
-          estado situacion tipo_inversion tipo_intervencion tipo_mantenimiento ///
-          monto_inversion devengado pim pia costo_actualizado_bi ///
-          avance_fisico avance_financiero ///
-          fecha_inicio fecha_culminacion fecha_entrega ///
-          fecha_inicio_et fecha_fin_et ///
-          unidad_ejecutora uf opmi sector pliego funcion
-
-    save "${Output}/BASE_PANORAMA.dta", replace
-    di as res _newline(1) "BASE_PANORAMA: " _N " obs, " c(k) " vars"
-
-    * Export a CSV para Power BI / Excel
-    export delimited using "${Output}/BASE_PANORAMA.csv", ///
-        delimiter(",") quote replace
-    di as res "BASE_PANORAMA.csv exportado"
 }
+
+use `panorama', clear
+
+* --- Merge con MEF Banco de Inversiones para enriquecer -----------------
+capture confirm file "${Output}/MEF_Base_Inversiones.dta"
+if !_rc {
+    preserve
+    use "${Output}/MEF_Base_Inversiones.dta", clear
+    * Solo quedarnos con las vars que necesitamos para enriquecer
+    capture keep cui departamento provincia distrito sector pliego ///
+         unidad_ejecutora uf uei opmi ///
+         costo_actualizado_bi devengado pim pia ///
+         avance_fisico_bi avance_financiero_bi ///
+         fecha_inicio_et fecha_fin_et ///
+         situacion estado_bi cartera_pmi funcion nombre_inversion
+    * Si el keep falla porque alguna var no existe, keep solo lo que haya
+    if _rc {
+        capture keep cui departamento provincia distrito uf opmi ///
+            unidad_ejecutora pliego sector nombre_inversion
+    }
+    duplicates drop cui, force
+    tempfile mef_bi
+    save `mef_bi'
+    restore
+
+    * Renombrar del master para que el merge no pelee por vars iguales
+    foreach v in departamento provincia distrito nombre_inversion ///
+                 devengado pim pia situacion {
+        capture rename `v' `v'_base
+    }
+
+    merge m:1 cui using `mef_bi', keep(master match) generate(_m_bi)
+
+    label define m_bi 1 "solo_panorama" 3 "match_BI"
+    label values _m_bi m_bi
+
+    * Consolidar: si la base original tenia el dato, conservar; si no, usar BI
+    foreach v in departamento provincia distrito nombre_inversion ///
+                 devengado pim pia situacion {
+        capture confirm variable `v'_base
+        if _rc continue
+        capture confirm variable `v'
+        if _rc {
+            rename `v'_base `v'
+            continue
+        }
+        * Si la del base esta vacia o missing, usar la del BI
+        capture confirm string variable `v'
+        if !_rc {
+            replace `v' = `v'_base if (`v' == "" | missing(`v')) & `v'_base != ""
+        }
+        else {
+            replace `v' = `v'_base if missing(`v') & !missing(`v'_base)
+        }
+        drop `v'_base
+    }
+}
+
+* Orden canonico
+to_lower_ascii
+capture order entidad unidad cui codigo_local codigo_modular ///
+      nombre_ie nombre_inversion departamento provincia distrito ///
+      estado situacion tipo_inversion tipo_intervencion tipo_mantenimiento ///
+      monto_inversion devengado pim pia costo_actualizado_bi ///
+      avance_fisico avance_financiero ///
+      fecha_inicio fecha_culminacion fecha_entrega ///
+      fecha_inicio_et fecha_fin_et ///
+      unidad_ejecutora uf opmi sector pliego funcion
+
+save "${Output}/BASE_PANORAMA.dta", replace
+di as res _newline(1) "BASE_PANORAMA: " _N " obs, " c(k) " vars"
+
+* Export a CSV para Power BI / Excel
+export delimited using "${Output}/BASE_PANORAMA.csv", ///
+    delimiter(",") quote replace
+di as res "BASE_PANORAMA.csv exportado"
 
 
 *============================================================================

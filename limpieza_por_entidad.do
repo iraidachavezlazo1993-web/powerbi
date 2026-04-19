@@ -157,6 +157,38 @@ program define rename_from_label
 end
 
 
+* ----- to_lower_ascii -------------------------------------------------------
+* Fuerza TODAS las variables a nombres en minusculas ASCII, sin tildes,
+* sin espacios ni caracteres especiales. Se ejecuta al final, despues de
+* canon_rename, para uniformar cualquier nombre que haya quedado con
+* tildes/MAYUSCULAS/CamelCase.
+capture program drop to_lower_ascii
+program define to_lower_ascii
+    quietly ds
+    local oldvars `r(varlist)'
+    local used ""
+    foreach v of local oldvars {
+        local nn = ustrlower(ustrnormalize("`v'", "nfd"))
+        local nn = ustrregexra("`nn'", "\p{Mn}", "")
+        local nn = ustrregexra("`nn'", "[^a-z0-9_]+", "_")
+        local nn = ustrregexra("`nn'", "_+", "_")
+        local nn = ustrregexra("`nn'", "^_+|_+$", "")
+        if "`nn'" == "" local nn "col"
+        if regexm("`nn'", "^[0-9]") local nn "v_`nn'"
+        local nn = substr("`nn'", 1, 32)
+        local base "`nn'"
+        local i = 1
+        while strpos(" `used' ", " `nn' ") > 0 {
+            local suf = "_`i'"
+            local nn = substr("`base'", 1, 32 - strlen("`suf'")) + "`suf'"
+            local ++i
+        }
+        if "`nn'" != "`v'" capture rename `v' `nn'
+        local used "`used' `nn'"
+    }
+end
+
+
 * ----- canon_rename : aplica diccionario comun a Unicode/Stata var names ----
 capture program drop canon_rename
 program define canon_rename
@@ -307,6 +339,120 @@ program define canon_rename
     * Conservar codigos de columna unica que no son junk
     ren_if Programa                       programa
     ren_if PROGRAMA                       programa
+
+    * --- Variables de UGSC / UGME / UGM / UZ ---------------------------------
+    ren_if Cantidaddelocaleseducativos    cantidad_locales
+    ren_if Cantidaddelocaleseducativ      cantidad_locales
+    ren_if Periodoinicial                 periodo_inicial
+    ren_if Periodofinalactual             periodo_final
+    ren_if Fechadeaprobacióndelet         fecha_aprobacion_et
+    ren_if FechadeaprobacióndelET         fecha_aprobacion_et
+    ren_if FechadeaprobaciónET            fecha_aprobacion_et
+    ren_if FechadecaducidaddelET          fecha_caducidad_et
+    ren_if Fechadecaducidaddelet          fecha_caducidad_et
+
+    * UGME
+    ren_if Códigomodular                  codigo_modular
+    ren_if Grupo                          grupo_bien
+    ren_if AulaDomoAulaMo                 grupo_bien
+    ren_if Descripcióndelbien             descripcion_bien
+    ren_if LOCALESEDUCATIVOS              nombre_ie
+    ren_if LocalEscolar                   nombre_ie
+    ren_if Fechadeentregaoestim           fecha_entrega
+    ren_if Capacidadoperativasolo         capacidad_operativa
+    ren_if MontocontractualS              monto_inversion
+    ren_if Montocontractual               monto_inversion
+    ren_if Totaldebienes                  total_bienes
+    ren_if Fasedelproceso                 fase_obra
+    ren_if Etapadelproceso                etapa_obra
+
+    * UGM
+    ren_if Año                            anio
+    ren_if AÑODEINSTALACIÓN               ano_instalacion
+    ren_if Tipodeintervenciónman          tipo_intervencion
+    ren_if Fechaestimadadeentrega         fecha_entrega
+    ren_if Montoasignadopara              monto_asignado
+    ren_if Montoasignadototal             monto_asignado_total
+    ren_if MontoasignadototalS            monto_asignado_total
+    ren_if Montotransferido               monto_transferido
+    ren_if MontotransferidoS              monto_transferido
+    ren_if Montoasignadopararutas         monto_rutas_acceso
+    ren_if EstadodelaFichadeAcc           estado_ficha
+    ren_if Códigosmodularesdelloc         codigos_modulares
+    ren_if Codigosmodularesdelloc         codigos_modulares
+
+    * UZ
+    ren_if Códigolocal                    codigo_local
+    ren_if NombredelaUnidadZonal          unidad_zonal
+    ren_if NombreUnidadZonal              unidad_zonal
+    ren_if Fechadeinspección              fecha_inspeccion
+    ren_if Especialistaquerealiza         especialista
+    ren_if SolicitudSGDCorreou            solicitud
+    ren_if Númeroydenominacióndel         numero_denominacion
+    ren_if Enlacedelinforme               enlace_informe
+    ren_if UnidaduOficinadelPRON          unidad_pronied
+    ren_if NiveldeGobiernoGobier          nivel_gobierno
+    ren_if TipodeentidadGRMPMD            tipo_entidad
+    ren_if Nombredeentidad                nombre_entidad
+    ren_if Númerodeparticipantes          cantidad_participantes
+    ren_if TemaFortalecimiento            tema
+    ren_if Títulodelasesoramiento         titulo_asesoramiento
+    ren_if Fecha                          fecha_evento
+
+    * --- MEF / Banco de Inversiones: variables clave para cruce -------------
+    ren_if CODIGO_INVERSION               codigo_inversion
+    ren_if CODIGO_SNIP                    cui_snip
+    ren_if CODIGO_UNICO                   cui
+    ren_if CODIGO_IDEA                    cui_idea
+    ren_if NOMBRE_INVERSION               nombre_inversion
+    ren_if DES_TIPO_FORMATO               des_tipo_formato
+    ren_if TIPO_IOARR                     tipo_ioarr
+    ren_if ESTADO                         estado_bi
+    ren_if SITUACION                      situacion
+    ren_if MARCO                          marco
+    ren_if DEPARTAMENTO_CUI               departamento
+    ren_if DEPARTAMENTO_PROXY             departamento_proxy
+    ren_if PROVINCIA_CUI                  provincia
+    ren_if DISTRITO                       distrito
+    ren_if NIVEL                          nivel_gobierno
+    ren_if SECTOR                         sector
+    ren_if COD_SECTOR                     cod_sector
+    ren_if PLIEGO                         pliego
+    ren_if COD_PLIEGO                     cod_pliego
+    ren_if UEP_ULTIMA                     unidad_ejecutora
+    ren_if UEP_PRINCIPAL                  unidad_ejecutora_principal
+    ren_if COD_SEC_EJEC_UEP_ULT           cod_sec_ejec
+    ren_if UF                             uf
+    ren_if UEI                            uei
+    ren_if OPMI                           opmi
+    ren_if FUNCION                        funcion
+    ren_if PROGRAMA                       programa
+    ren_if SUB_PROGRAMA                   sub_programa
+    ren_if FECHA_REGISTRO                 fecha_registro
+    ren_if FECHA_VIABILIDAD               fecha_viabilidad
+    ren_if MONTO_ALTE                     monto_alterno
+    ren_if MONTO_LAUDO                    monto_laudo
+    ren_if COSTO_ACTUALIZADO_BI           costo_actualizado_bi
+    ren_if COSTO_INV_TOTAL_BI             monto_inversion
+    ren_if COSTO_INV_TOTAL_PMI            costo_total_pmi
+    ren_if TIENE_ET_DE                    tiene_et
+    ren_if FECHA_ET_DE                    fecha_inicio_et
+    ren_if ULT_MODIF_ET_DE                fecha_fin_et
+    ren_if FEC_INI_F8                     fecha_inicio_f8
+    ren_if FEC_FIN_F8                     fecha_fin_f8
+    ren_if AVANCE_FISICO_F12B             avance_fisico_bi
+    ren_if AVANCE_EJECUCION_F12B          avance_financiero_bi
+    ren_if DEV_ACUM_ANO_ACTUAL            devengado
+    ren_if PIM_SIAF                       pim
+    ren_if PIA_SIAF                       pia
+    ren_if MONTO_PIM_BI                   pim_bi
+    ren_if MONTO_PIA_BI                   pia_bi
+    ren_if CARTERA_PMI                    cartera_pmi
+    ren_if CICLO_INVERSION_PMI            ciclo_inversion
+    ren_if ORDEN_PRELACION_PMI            orden_prelacion
+    ren_if DES_BRECHA                     brecha
+    ren_if DES_SERVICIO                   servicio
+    ren_if FECHA_ACTUALIZACION            fecha_actualizacion_bi
 end
 
 
@@ -390,8 +536,12 @@ program define post_clean
         if !_rc format `v' %6.4f
     }
 
+    * Minuscula ASCII para TODAS las variables que hayan quedado con tildes
+    * o MAYUSCULAS despues del diccionario.
+    to_lower_ascii
+
     * Orden canonico
-    local front "cui cui_snip cui_idea codigo_local codigo_modular codigos_modulares nombre_ie nombre_inversion nombre_corto nombre_peip departamento provincia distrito estado fase_obra etapa_obra etapa_intervencion tipo_inversion tipo_intervencion tipo_mantenimiento tipo_sistema_modular monto_inversion devengado avance_fisico avance_financiero avance_diseno fecha_inicio fecha_culminacion fecha_recepcion fecha_entrega fecha_inauguracion fecha_liquidacion comentario_general"
+    local front "cui cui_snip cui_idea codigo_local codigo_modular codigos_modulares nombre_ie nombre_inversion nombre_corto nombre_peip departamento provincia distrito ubigeo sector pliego unidad_ejecutora uf uei opmi estado estado_bi situacion fase_obra etapa_obra etapa_intervencion tipo_inversion tipo_intervencion tipo_mantenimiento tipo_sistema_modular monto_inversion costo_actualizado_bi devengado pim pia cartera_pmi avance_fisico avance_financiero avance_diseno avance_fisico_bi fecha_inicio fecha_culminacion fecha_recepcion fecha_entrega fecha_inauguracion fecha_liquidacion fecha_inicio_et fecha_fin_et comentario_general"
     local ord ""
     foreach v of local front {
         capture confirm variable `v'
@@ -563,6 +713,153 @@ save "${Output}/UGEO.dta", replace
 di as res "UGEO: " _N " obs"
 
 
+* ---------- UGSC / ASITEC-SIAT ----------------------------------------------
+capture {
+    import excel "${Input}/UGSC.xlsx", sheet("ASITEC-SIAT") cellrange(A3) ///
+        firstrow allstring clear
+    capture drop N
+    duplicates drop
+    canon_rename
+    post_clean
+    save "${Output}/UGSC_ASITEC.dta", replace
+    di as res "UGSC_ASITEC: " _N " obs"
+}
+
+
+* ---------- UGSC / SEGUIMIENTO PI FINANCIADOS -------------------------------
+capture {
+    import excel "${Input}/UGSC.xlsx", sheet("SEGUIMIENTO DE PI FINANCIADOS ") ///
+        cellrange(A3) firstrow allstring clear
+    capture drop N
+    duplicates drop
+    canon_rename
+    post_clean
+    save "${Output}/UGSC_SEGUIMIENTO.dta", replace
+    di as res "UGSC_SEGUIMIENTO: " _N " obs"
+}
+
+
+* ---------- UGME / SISTEMAS MODULARES ---------------------------------------
+capture {
+    import excel "${Input}/UGME.xlsx", sheet("SISTEMAS MODULARES") ///
+        cellrange(A3) firstrow allstring clear
+    capture drop N
+    duplicates drop
+    canon_rename
+    post_clean
+    save "${Output}/UGME_SISTEMAS_MODULARES.dta", replace
+    di as res "UGME_SISTEMAS_MODULARES: " _N " obs"
+}
+
+
+* ---------- UGME / MOBILIARIO Y EQUIPAMIENTO --------------------------------
+capture {
+    import excel "${Input}/UGME.xlsx", sheet("MOBILIARIO Y EQUIPAMIENTO") ///
+        cellrange(A3) firstrow allstring clear
+    capture drop N
+    duplicates drop
+    canon_rename
+    post_clean
+    save "${Output}/UGME_MOBILIARIO.dta", replace
+    di as res "UGME_MOBILIARIO: " _N " obs"
+}
+
+
+* ---------- UGME / PLAN DE CONSERVACION MODULAR -----------------------------
+capture {
+    import excel "${Input}/UGME.xlsx", sheet("PLAN DE CONSERVACIÓN MODULAR") ///
+        cellrange(A3) firstrow allstring clear
+    capture drop N
+    duplicates drop
+    canon_rename
+    post_clean
+    save "${Output}/UGME_PLAN_CONSERVACION.dta", replace
+    di as res "UGME_PLAN_CONSERVACION: " _N " obs"
+}
+
+
+* ---------- UGM / ACONDICIONAMIENTO -----------------------------------------
+capture {
+    import excel "${Input}/UGM.xlsx", sheet("ACONDICIONAMIENTO") ///
+        cellrange(A3) firstrow allstring clear
+    capture drop N
+    duplicates drop
+    canon_rename
+    post_clean
+    save "${Output}/UGM_ACONDICIONAMIENTO.dta", replace
+    di as res "UGM_ACONDICIONAMIENTO: " _N " obs"
+}
+
+
+* ---------- UGM / MANTENIMIENTO 2025 ----------------------------------------
+* OJO: header real esta en fila 4 porque fila 3 tiene agrupadores ("Detalle FAM").
+capture {
+    import excel "${Input}/UGM.xlsx", sheet("MANTENIMIENTO 2025") ///
+        cellrange(A4) firstrow allstring clear
+    capture drop N
+    duplicates drop
+    canon_rename
+    post_clean
+    save "${Output}/UGM_MANTENIMIENTO_2025.dta", replace
+    di as res "UGM_MANTENIMIENTO_2025: " _N " obs"
+}
+
+
+* ---------- UGM / MANTENIMIENTO 2026 ----------------------------------------
+capture {
+    import excel "${Input}/UGM.xlsx", sheet("MANTENIMIENTO 2026") ///
+        cellrange(A4) firstrow allstring clear
+    capture drop N
+    duplicates drop
+    canon_rename
+    post_clean
+    save "${Output}/UGM_MANTENIMIENTO_2026.dta", replace
+    di as res "UGM_MANTENIMIENTO_2026: " _N " obs"
+}
+
+
+* ---------- UGM / ACCESIBILIDAD (10 hojas por ano de convocatoria) ----------
+* Se procesan 2017-2 a 2026-2; header real en fila 4.
+foreach anio in 2017 2018 2019 2020 2021 2022 2023 2024 2025 2026 {
+    capture {
+        import excel "${Input}/UGM.xlsx", sheet("ACCESIBILIDAD `anio'-2") ///
+            cellrange(A4) firstrow allstring clear
+        capture drop N
+        duplicates drop
+        canon_rename
+        post_clean
+        save "${Output}/UGM_ACCESIBILIDAD_`anio'.dta", replace
+        di as res "UGM_ACCESIBILIDAD_`anio': " _N " obs"
+    }
+}
+
+
+* ---------- UZ (Zonales) / INSPECCIONES -------------------------------------
+capture {
+    import excel "${Input}/2026.03.30 Zonales_UZ.xlsx" , sheet("INSPECCIONES") ///
+        cellrange(A3) firstrow allstring clear
+    capture drop N
+    duplicates drop
+    canon_rename
+    post_clean
+    save "${Output}/UZ_INSPECCIONES.dta", replace
+    di as res "UZ_INSPECCIONES: " _N " obs"
+}
+
+
+* ---------- UZ (Zonales) / ASESORAMIENTO ------------------------------------
+capture {
+    import excel "${Input}/2026.03.30 Zonales_UZ.xlsx", sheet("ASESORAMIENTO") ///
+        cellrange(A3) firstrow allstring clear
+    capture drop N
+    duplicates drop
+    canon_rename
+    post_clean
+    save "${Output}/UZ_ASESORAMIENTO.dta", replace
+    di as res "UZ_ASESORAMIENTO: " _N " obs"
+}
+
+
 * ---------- UE118 / PMESUT --------------------------------------------------
 import excel "${Input}/UE118.xlsx", sheet("PMESUT") cellrange(A2) firstrow ///
     allstring clear
@@ -665,16 +962,29 @@ capture {
 * PASO 2 - Consolidar por entidad (append con tag de origen)
 *============================================================================
 
-* --- PRONIED (UGEO + UGRD_*) -----------------------------------------------
+* --- PRONIED (UGEO + UGRD + UGSC + UGME + UGM + UZ) ------------------------
 capture {
-    use "${Output}/UGEO.dta", clear
-    gen unidad = "UGEO"
-    append using "${Output}/UGRD_PIRCC.dta"
-    replace unidad = "UGRD_PIRCC" if missing(unidad)
-    append using "${Output}/UGRD_MBR.dta"
-    replace unidad = "UGRD_MBR" if missing(unidad)
-    append using "${Output}/UGRD_ME.dta"
-    replace unidad = "UGRD_ME" if missing(unidad)
+    local prnd_files UGEO UGRD_PIRCC UGRD_MBR UGRD_ME ///
+        UGSC_ASITEC UGSC_SEGUIMIENTO ///
+        UGME_SISTEMAS_MODULARES UGME_MOBILIARIO UGME_PLAN_CONSERVACION ///
+        UGM_ACONDICIONAMIENTO UGM_MANTENIMIENTO_2025 UGM_MANTENIMIENTO_2026 ///
+        UGM_ACCESIBILIDAD_2017 UGM_ACCESIBILIDAD_2018 UGM_ACCESIBILIDAD_2019 ///
+        UGM_ACCESIBILIDAD_2020 UGM_ACCESIBILIDAD_2021 UGM_ACCESIBILIDAD_2022 ///
+        UGM_ACCESIBILIDAD_2023 UGM_ACCESIBILIDAD_2024 UGM_ACCESIBILIDAD_2025 ///
+        UGM_ACCESIBILIDAD_2026 ///
+        UZ_INSPECCIONES UZ_ASESORAMIENTO
+
+    clear
+    tempfile acc
+    save `acc', emptyok
+    foreach f of local prnd_files {
+        capture use "${Output}/`f'.dta", clear
+        if _rc continue
+        gen unidad = "`f'"
+        append using `acc'
+        save `acc', replace
+    }
+    use `acc', clear
     order unidad, first
     save "${Output}/PRONIED.dta", replace
     di as res "PRONIED consolidado: " _N " obs"
@@ -718,6 +1028,99 @@ capture {
 }
 
 
+*============================================================================
+* PASO 3 - BASE_PANORAMA: append de TODAS las entidades + merge con MEF para
+*          rellenar geografia (departamento/provincia/distrito/uf/ue/opmi/etc.)
+*============================================================================
+* La idea: una sola .dta que junta todas las intervenciones con una columna
+* `entidad` y `unidad` que identifican de donde viene cada fila, y con las
+* variables de BI enriquecidas cuando existe CUI.
+
+capture {
+    clear
+    tempfile panorama
+    save `panorama', emptyok
+
+    * Mapa entidad -> lista de archivos
+    local M_PRONIED   UGEO UGRD_PIRCC UGRD_MBR UGRD_ME ///
+                      UGSC_ASITEC UGSC_SEGUIMIENTO ///
+                      UGME_SISTEMAS_MODULARES UGME_MOBILIARIO UGME_PLAN_CONSERVACION ///
+                      UGM_ACONDICIONAMIENTO UGM_MANTENIMIENTO_2025 UGM_MANTENIMIENTO_2026 ///
+                      UGM_ACCESIBILIDAD_2017 UGM_ACCESIBILIDAD_2018 UGM_ACCESIBILIDAD_2019 ///
+                      UGM_ACCESIBILIDAD_2020 UGM_ACCESIBILIDAD_2021 UGM_ACCESIBILIDAD_2022 ///
+                      UGM_ACCESIBILIDAD_2023 UGM_ACCESIBILIDAD_2024 UGM_ACCESIBILIDAD_2025 ///
+                      UGM_ACCESIBILIDAD_2026 ///
+                      UZ_INSPECCIONES UZ_ASESORAMIENTO
+    local M_PEIP      PEIP_IMPLEMENTADOS PEIP_CONTINGENCIA PEIP_MANTENIMIENTO
+    local M_UE118     UE118_PMESUT UE118_PMESTP
+    local M_ANIN      ANIN
+    local M_FONCODES  FONCODES_LE_INTERVENIDOS FONCODES_MANT_2025 FONCODES_MANT_2026
+
+    foreach ent in PRONIED PEIP UE118 ANIN FONCODES {
+        foreach f of local M_`ent' {
+            capture use "${Output}/`f'.dta", clear
+            if _rc continue
+            * Forzar strings en codigo_* y cui para que el append no pelee
+            foreach c in cui codigo_local codigo_modular codigos_modulares {
+                capture confirm string variable `c'
+                if _rc {
+                    capture confirm variable `c'
+                    if !_rc tostring `c', replace force
+                }
+            }
+            gen entidad = "`ent'"
+            gen unidad  = "`f'"
+            append using `panorama', force
+            save `panorama', replace
+        }
+    }
+
+    use `panorama', clear
+
+    * --- Merge con MEF Banco de Inversiones para enriquecer -----------------
+    * Vars a traer desde MEF: geografia, unidad ejecutora, UF/OPMI/UEI,
+    * pliego, sector, monto_inversion (costo total BI), devengado, PIM, PIA,
+    * avances, fechas ET, situacion, estado BI, cartera PMI.
+    capture confirm file "${Output}/MEF_Base_Inversiones.dta"
+    if !_rc {
+        merge m:1 cui using "${Output}/MEF_Base_Inversiones.dta", ///
+            keep(master match) ///
+            keepusing(departamento provincia distrito ///
+                     sector pliego unidad_ejecutora uf uei opmi ///
+                     costo_actualizado_bi devengado pim pia ///
+                     avance_fisico_bi avance_financiero_bi ///
+                     fecha_inicio_et fecha_fin_et ///
+                     situacion estado_bi cartera_pmi funcion ///
+                     nombre_inversion) ///
+            update replace ///
+            generate(_m_bi)
+        * _m_bi==1: sin match en BI (no se enriquecio)
+        * _m_bi==3: match (datos enriquecidos)
+        label define m_bi 1 "solo_panorama" 3 "match_BI"
+        label values _m_bi m_bi
+    }
+
+    order entidad unidad
+    to_lower_ascii
+    save "${Output}/BASE_PANORAMA.dta", replace
+    di as res _newline(1) "BASE_PANORAMA: " _N " obs, " c(k) " vars"
+
+    * Export a CSV para Power BI / Excel
+    export delimited using "${Output}/BASE_PANORAMA.csv", ///
+        delimiter(",") quote replace
+    di as res "BASE_PANORAMA.csv exportado para Power BI"
+}
+
+
+*============================================================================
+* Resumen final por entidad
+*============================================================================
+capture use "${Output}/BASE_PANORAMA.dta", clear
+if !_rc {
+    di _newline(1) as txt "===== CONTEO POR ENTIDAD/UNIDAD ====="
+    tab entidad unidad, missing
+}
+
 di _newline(2) as res "===== LISTO ====="
 di as txt "Bases .dta en: ${Output}"
-di as txt "Entidades PRONIED pendientes: UGSC, UGME, UGM, Uzonal."
+di as txt "BASE_PANORAMA.dta + BASE_PANORAMA.csv listos para el visor (Power BI)."

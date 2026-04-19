@@ -291,33 +291,40 @@ _parrafo "NACIONAL" `fh'
 * Tabla tipologias
 _tabla_tipologias `fh'
 
-* Parrafos por departamento
+* Parrafos por departamento (usa tempfiles para evitar preserve anidados)
 file write `fh' `"<div class="card"><h2>Detalle por departamento</h2></div>"' _n
+
+tempfile _full
+quietly save `_full'
+
 quietly levelsof departamento if departamento != "", local(deptos)
 foreach d of local deptos {
-    preserve
+    quietly use `_full', clear
     quietly keep if departamento == "`d'"
     _parrafo "`d'" `fh'
 
-    * Parrafos por provincia dentro del departamento
+    tempfile _depto
+    quietly save `_depto'
+
     quietly levelsof provincia if provincia != "", local(provs)
     foreach p of local provs {
-        preserve
+        quietly use `_depto', clear
         quietly keep if provincia == "`p'"
         _parrafo "`p', `d'" `fh'
 
-        * Parrafos por distrito
+        tempfile _prov
+        quietly save `_prov'
+
         quietly levelsof distrito if distrito != "", local(dists)
         foreach di of local dists {
-            preserve
+            quietly use `_prov', clear
             quietly keep if distrito == "`di'"
             _parrafo "`di', `p', `d'" `fh'
-            restore
         }
-        restore
     }
-    restore
 }
+
+quietly use `_full', clear
 
 * Cerrar HTML
 file write `fh' `"</div></body></html>"' _n

@@ -27,11 +27,17 @@ def load(path):
 
 
 def dedup(df):
+    """Deduplica intervenciones:
+    - Con CUI: una fila por CUI + tipo_intervencion_gral (mismo CUI puede
+      tener PROYECTO + MANTENIMIENTO = 2 intervenciones distintas).
+    - Sin CUI: una fila por codigo_local + tipo_intervencion_gral + unidad.
+    """
     has_cui = df[df["cui"] != ""].copy()
     no_cui = df[df["cui"] == ""].copy()
     if not has_cui.empty:
         has_cui["_c"] = has_cui.notna().sum(axis=1)
-        has_cui = has_cui.sort_values("_c", ascending=False).drop_duplicates(subset="cui", keep="first").drop(columns=["_c"])
+        has_cui = has_cui.sort_values("_c", ascending=False).drop_duplicates(
+            subset=["cui","tipo_intervencion_gral"], keep="first").drop(columns=["_c"])
     if not no_cui.empty:
         key = [k for k in ["codigo_local","tipo_intervencion_gral","unidad"] if k in no_cui.columns]
         if key:
@@ -70,7 +76,13 @@ def compute_stats(df):
     n = len(df)
     cuis = df.loc[df["cui"]!="","cui"] if "cui" in df.columns else pd.Series()
     n_cui = int(cuis.nunique())
-    df_u = df[df["cui"]!=""].drop_duplicates(subset="cui",keep="first") if "cui" in df.columns else df
+    # Monto: dedup por CUI+tipo (un CUI con PROYECTO y MANTENIMIENTO suma ambos)
+    if "cui" in df.columns and "tipo_intervencion_gral" in df.columns:
+        df_u = df[df["cui"]!=""].drop_duplicates(subset=["cui","tipo_intervencion_gral"],keep="first")
+    elif "cui" in df.columns:
+        df_u = df[df["cui"]!=""].drop_duplicates(subset="cui",keep="first")
+    else:
+        df_u = df
     monto = float(df_u["monto_inversion"].sum()) if "monto_inversion" in df.columns else 0
     dev = float(df_u["devengado"].sum()) if "devengado" in df.columns else 0
     avf = float(df["avance_fisico"].mean()) if "avance_fisico" in df.columns and df["avance_fisico"].notna().any() else 0
@@ -158,12 +170,16 @@ body{{font-family:'Segoe UI',system-ui,sans-serif;background:#e8eaed;color:#2d34
 @media(max-width:1100px){{.main{{grid-template-columns:1fr;}} .sidebar,.rightpanel{{display:none}} }}
 
 /* Sidebar filters */
-.sidebar{{background:#fff;padding:16px;border-right:1px solid #ddd}}
+.sidebar{{background:#fff;padding:16px;border-right:1px solid #ddd;overflow-y:auto}}
 .sidebar h3{{font-size:.8em;color:#555;margin:12px 0 4px;text-transform:uppercase;letter-spacing:.5px}}
 .sidebar select{{width:100%;padding:7px 8px;border:1px solid #bbb;border-radius:4px;font-size:.82em;margin-bottom:2px;background:#fff}}
 .sidebar .filter-label{{background:#1a2a4a;color:#fff;padding:4px 8px;border-radius:3px;font-size:.72em;font-weight:600;margin-bottom:3px;display:block}}
 .btn-clear{{width:100%;padding:10px;background:#c0392b;color:#fff;border:none;border-radius:6px;font-size:.85em;font-weight:700;cursor:pointer;margin-top:16px;text-transform:uppercase}}
 .btn-clear:hover{{background:#a93226}}
+.ms-box{{max-height:150px;overflow-y:auto;border:1px solid #bbb;border-radius:4px;padding:4px;margin-bottom:4px;background:#fff}}
+.ms-box label{{display:block;font-size:.78em;padding:2px 4px;cursor:pointer}}
+.ms-box label:hover{{background:#edf2fa}}
+.ms-box input{{margin-right:4px}}
 
 /* Center content */
 .content{{padding:16px;background:#f4f5f7;overflow-y:auto}}
@@ -244,11 +260,14 @@ tr:hover td{{background:#edf2fa}}
   <div class="sidebar">
     <h3>Organizacion territorial</h3>
     <span class="filter-label">Region</span>
-    <select id="s-dep" onchange="onFilter()"><option value="">Todas</option>{depto_opts}</select>
+    <input type="text" id="search-dep" placeholder="Buscar..." style="width:100%;padding:4px;font-size:.78em;margin-bottom:2px;border:1px solid #bbb;border-radius:4px" oninput="searchFilter('dep')">
+    <div class="ms-box" id="ms-dep">
+      {"".join(f'<label><input type="checkbox" value="{d}" onchange="onFilter()"> {d}</label>' for d in deptos)}
+    </div>
     <span class="filter-label">Provincia</span>
-    <select id="s-prov" onchange="onFilter()"><option value="">Todas</option></select>
+    <div class="ms-box" id="ms-prov"><label style="color:#999">Seleccione region(es)</label></div>
     <span class="filter-label">Distrito</span>
-    <select id="s-dist" onchange="onFilter()"><option value="">Todas</option></select>
+    <div class="ms-box" id="ms-dist"><label style="color:#999">Seleccione provincia(s)</label></div>
 
     <h3>Tipo de intervencion</h3>
     <select id="s-tipo" onchange="onFilter()"><option value="">Todas</option>
@@ -332,16 +351,27 @@ const ENTS = {json.dumps(ENTIDADES)};
 function fmtM(v){{if(!v)return'-';if(v>=1e6)return'S/ '+(v/1e6).toFixed(2)+' mill.';return'S/ '+v.toLocaleString('es-PE',{{maximumFractionDigits:0}});}}
 function fmtP(v){{return v>0?(v*100).toFixed(1)+'%':'-';}}
 
+function getChecked(containerId){{
+  const cbs=document.querySelectorAll('#'+containerId+' input[type=checkbox]:checked');
+  return Array.from(cbs).map(cb=>cb.value);
+}}
+
+function searchFilter(level){{
+  const term=document.getElementById('search-'+level).value.toLowerCase();
+  const labels=document.querySelectorAll('#ms-'+level+' label');
+  labels.forEach(l=>{{l.style.display=l.textContent.toLowerCase().includes(term)?'':'none';}});
+}}
+
 function getFiltered(){{
-  const d=document.getElementById('s-dep').value;
-  const p=document.getElementById('s-prov').value;
-  const di=document.getElementById('s-dist').value;
+  const deps=getChecked('ms-dep');
+  const provs=getChecked('ms-prov');
+  const dists=getChecked('ms-dist');
   const t=document.getElementById('s-tipo').value;
   const e=document.getElementById('s-ent').value;
   return DATA.filter(r=>{{
-    if(d&&r.departamento!==d)return false;
-    if(p&&r.provincia!==p)return false;
-    if(di&&r.distrito!==di)return false;
+    if(deps.length&&!deps.includes(r.departamento))return false;
+    if(provs.length&&!provs.includes(r.provincia))return false;
+    if(dists.length&&!dists.includes(r.distrito))return false;
     if(t&&r.tipo_intervencion_gral!==t)return false;
     if(e&&r.entidad!==e)return false;
     return true;
@@ -353,7 +383,7 @@ function computeStats(rows){{
   const cuiSet=new Set(rows.filter(r=>r.cui).map(r=>r.cui));
   const n_cui=cuiSet.size;
   const seen=new Set();let monto=0;
-  rows.forEach(r=>{{if(r.cui&&!seen.has(r.cui)){{seen.add(r.cui);monto+=r.monto||0;}}}});
+  rows.forEach(r=>{{const k=(r.cui||'')+'|'+(r.tipo_intervencion_gral||'');if(k!=='|'&&!seen.has(k)){{seen.add(k);monto+=r.monto||0;}}}});
   const tipos={{}};TIPOS.forEach(t=>{{const c=rows.filter(r=>r.tipo_intervencion_gral===t).length;if(c)tipos[t]=c;}});
   const ents={{}};ENTS.forEach(e=>{{const c=rows.filter(r=>r.entidad===e).length;if(c)ents[e]=c;}});
   return {{n,n_cui,monto,tipos,ents}};
@@ -413,36 +443,41 @@ function renderTable(rows){{
 }}
 
 function getLabel(){{
-  const d=document.getElementById('s-dep').value;
-  const p=document.getElementById('s-prov').value;
-  const di=document.getElementById('s-dist').value;
-  if(di)return di+', '+p+', '+d;
-  if(p)return p+', '+d;
-  if(d)return d;
+  const deps=getChecked('ms-dep');
+  const provs=getChecked('ms-prov');
+  const dists=getChecked('ms-dist');
+  if(dists.length)return dists.join(', ');
+  if(provs.length)return provs.join(', ');
+  if(deps.length)return deps.join(', ');
   return 'Nacional';
 }}
 
+function updateProvDist(){{
+  const deps=getChecked('ms-dep');
+  const mp=document.getElementById('ms-prov');
+  const md=document.getElementById('ms-dist');
+  if(!deps.length){{
+    mp.innerHTML='<label style="color:#999">Seleccione region(es)</label>';
+    md.innerHTML='<label style="color:#999">Seleccione provincia(s)</label>';
+    return;
+  }}
+  // Build province checkboxes from selected departments
+  const provSet=new Set();
+  deps.forEach(d=>{{if(GEO[d])Object.keys(GEO[d].provs).forEach(p=>provSet.add(p));}});
+  const provs=Array.from(provSet).sort();
+  mp.innerHTML=provs.map(p=>`<label><input type="checkbox" value="${{p}}" onchange="onFilter()"> ${{p}}</label>`).join('');
+
+  // Build district checkboxes from selected provinces
+  const selProvs=getChecked('ms-prov');
+  if(!selProvs.length){{md.innerHTML='<label style="color:#999">Seleccione provincia(s)</label>';return;}}
+  const distSet=new Set();
+  deps.forEach(d=>{{if(GEO[d])selProvs.forEach(p=>{{if(GEO[d].provs[p])Object.keys(GEO[d].provs[p].dists).forEach(di=>distSet.add(di));}});}});
+  const dists=Array.from(distSet).sort();
+  md.innerHTML=dists.map(di=>`<label><input type="checkbox" value="${{di}}" onchange="onFilter()"> ${{di}}</label>`).join('');
+}}
+
 function onFilter(){{
-  const d=document.getElementById('s-dep').value;
-  const p=document.getElementById('s-prov').value;
-
-  // Cascade provincia
-  if(d&&GEO[d]){{
-    const sp=document.getElementById('s-prov');
-    const cur=sp.value;
-    sp.innerHTML='<option value="">Todas</option>';
-    Object.keys(GEO[d].provs).sort().forEach(pr=>sp.innerHTML+=`<option value="${{pr}}">${{pr}}</option>`);
-    sp.value=cur;
-  }}
-  // Cascade distrito
-  if(d&&p&&GEO[d]?.provs?.[p]){{
-    const sd=document.getElementById('s-dist');
-    const cur=sd.value;
-    sd.innerHTML='<option value="">Todas</option>';
-    Object.keys(GEO[d].provs[p].dists).sort().forEach(di=>sd.innerHTML+=`<option value="${{di}}">${{di}}</option>`);
-    sd.value=cur;
-  }}
-
+  updateProvDist();
   const rows=getFiltered();
   const st=computeStats(rows);
   const label=getLabel();
@@ -459,9 +494,12 @@ function onFilter(){{
 }}
 
 function clearFilters(){{
-  ['s-dep','s-prov','s-dist','s-tipo','s-ent'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('s-prov').innerHTML='<option value="">Todas</option>';
-  document.getElementById('s-dist').innerHTML='<option value="">Todas</option>';
+  document.querySelectorAll('.ms-box input[type=checkbox]').forEach(cb=>cb.checked=false);
+  ['s-tipo','s-ent'].forEach(id=>document.getElementById(id).value='');
+  const si=document.getElementById('search-dep');if(si)si.value='';
+  searchFilter('dep');
+  document.getElementById('ms-prov').innerHTML='<label style="color:#999">Seleccione region(es)</label>';
+  document.getElementById('ms-dist').innerHTML='<label style="color:#999">Seleccione provincia(s)</label>';
   onFilter();
 }}
 
